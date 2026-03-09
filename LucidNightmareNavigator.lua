@@ -44,6 +44,22 @@ local last_dir, last_room_number
 
 local wall_buttons = {}
 local guidance_buttons = {}
+local poi_buttons = {}
+
+local poi_hex_colors = {
+	"ffff00",  -- yellow: (1, 1, 0)
+	"0099ff",  -- blue:   (0, 0.6, 1)
+	"ff0000",  -- red:    (1, 0, 0)
+	"00ff00",  -- green:  (0, 1, 0)
+	"ff00ff",  -- purple: (1, 0, 1)
+}
+local poi_hex_colors_found = {
+	"888844",  -- dim yellow
+	"446688",  -- dim blue
+	"884444",  -- dim red
+	"448844",  -- dim green
+	"884488",  -- dim purple
+}
 
 -- Quality Discount Function Pointers:
 local navigateKludge
@@ -53,6 +69,7 @@ local resetVisitedKludge
 local navtarget = 11
 
 local poirooms = {}
+local trapRoom = nil
 
 --local doors = {{{-1378, 680},{-1300,710}}, -- north
 --               {{-1440, 600},{-1410,660}}, -- east
@@ -157,22 +174,27 @@ end
 local function recolorRoom(r)
 	--resetColor(r, r.POI_c, r.POI_t)
 
-	local func = r.POI_t == "rune" and r.button.SetBackdropColor or r.button.SetBackdropBorderColor
+	if r.is_trap then
+		r.button:SetBackdropColor(1, 0.5, 0, 1)
+		r.button:SetBackdropBorderColor(1, 0.5, 0, 1)
+	else
+		local func = r.POI_t == "rune" and r.button.SetBackdropColor or r.button.SetBackdropBorderColor
 
-	if r.POI_c == yellow then
-		func(r.button, 1, 1, 0, 1)
-	elseif r.POI_c == blue then
-		func(r.button, 0, 0.6, 1, 1)
-	elseif r.POI_c == green then
-		func(r.button, 0, 1, 0, 1)
-	elseif r.POI_c == purple then
-		func(r.button, 1, 0, 1, 1)
-	elseif r.POI_c == red then
-		func(r.button, 1, 0, 0, 1)
-	else -- clear
-		r.button:SetBackdropColor(1, 1, 1, 1)
-		r.button:SetBackdropBorderColor(0, 0, 0, 0)
-    end
+		if r.POI_c == yellow then
+			func(r.button, 1, 1, 0, 1)
+		elseif r.POI_c == blue then
+			func(r.button, 0, 0.6, 1, 1)
+		elseif r.POI_c == green then
+			func(r.button, 0, 1, 0, 1)
+		elseif r.POI_c == purple then
+			func(r.button, 1, 0, 1, 1)
+		elseif r.POI_c == red then
+			func(r.button, 1, 0, 0, 1)
+		else -- clear
+			r.button:SetBackdropColor(1, 1, 1, 1)
+			r.button:SetBackdropBorderColor(0, 0, 0, 0)
+		end
+	end
 
     for dir=1,4 do
         if r.walls[dir] then
@@ -216,6 +238,27 @@ local function updateWallButtonText()
             wall_buttons[i]:SetText("Wall to the "..direction_strings[i])
         else
 			wall_buttons[i]:SetText("No "..direction_strings[i].." Wall")
+		end
+	end
+end
+
+local function updatePOIButtonText()
+	for i = 1, 5 do
+		local runeBtn = poi_buttons[i]
+		local orbBtn = poi_buttons[i + 5]
+		if runeBtn then
+			if poirooms[i] ~= nil then
+				runeBtn:SetText("|cff" .. poi_hex_colors_found[i] .. "✓ " .. color_strings[i] .. " Rune|r")
+			else
+				runeBtn:SetText("|cff" .. poi_hex_colors[i] .. color_strings[i] .. " Rune|r")
+			end
+		end
+		if orbBtn then
+			if poirooms[i + 5] ~= nil then
+				orbBtn:SetText("|cff" .. poi_hex_colors_found[i] .. "✓ " .. color_strings[i] .. " Orb|r")
+			else
+				orbBtn:SetText("|cff" .. poi_hex_colors[i] .. color_strings[i] .. " Orb|r")
+			end
 		end
 	end
 end
@@ -306,8 +349,13 @@ local function EraseRooms()
 	wipe(rooms)
 	wipe(map)
 	wipe(poirooms)
+	trapRoom = nil
 
 	last_dir = north
+
+	if poi_buttons[1] then
+		updatePOIButtonText()
+	end
 end
 
 local function ResetMap()
@@ -401,6 +449,12 @@ local function deDuplicateMap(orig, dupe)
 		return
 	end
 
+	-- Never merge a trap room; it is a unique fixed room in the maze
+	if (orig ~= nil and orig.is_trap) or (dupe ~= nil and dupe.is_trap) then
+		print("Skipping map deduplication: one of the rooms is the teleport trap room.")
+		return
+	end
+
 	local roomQueue = {}
 	local rq1 = 1
 	local rq2 = 1
@@ -485,6 +539,21 @@ local function deDuplicateMap(orig, dupe)
 end
 
 local poi_warned = 0
+
+local reset_confirmed = false
+local function newMapClick()
+	if not reset_confirmed then
+		reset_confirmed = true
+		print("|cffff4444Warning:|r This will erase your entire map. Click 'New Map' again to confirm.")
+		return
+	end
+	reset_confirmed = false
+	LucidNightmareNavigatorDB = {}
+	ResetMap()
+	updatePOIButtonText()
+	print("Map cleared. Starting fresh.")
+end
+
 local function setPOIClick(self)
 
 	if (self.poi_index == nil) then
@@ -525,20 +594,34 @@ local function setPOIClick(self)
 		current_room.POI_c = self.c
 		recolorRoom(current_room)
 	end
+
+	-- Check if all 5 runes and 5 orbs have been found
+	local found = 0
+	for i = 1, 10 do
+		if poirooms[i] ~= nil then
+			found = found + 1
+		end
+	end
+	if found == 10 then
+		print("|cff00ff00All 5 runes and 5 orbs have been marked!|r You can now start matching orbs to their runes. Use the Navigation Target buttons to route between them.")
+	end
+	updatePOIButtonText()
 end
 
 local function updateNavButtonText()
-	for i=1,11 do
+	for i=1,12 do
 		local btn = guidance_buttons[i]
 
 		local text = ""
 
 		if (i == 11) then
 			text = "Unexplored Territory"
+		elseif (i == 12) then
+			text = "Teleport Trap"
 		elseif (i > 0 and i < 6) then
-			text = color_strings[i].." Rune"
+			text = "|cff" .. poi_hex_colors[i] .. color_strings[i] .. " Rune|r"
 		elseif (i > 5 and i < 11) then
-			text = color_strings[i-5].." Orb"
+			text = "|cff" .. poi_hex_colors[i - 5] .. color_strings[i - 5] .. " Orb|r"
 		end
 
 		if (i == navtarget) then
@@ -738,39 +821,18 @@ end
 
 -- end
 
-function importMap()
-
-	print("WARNING!  You must load the map from the same room as you were when you saved the map")
-
+local function importMapFromString(t)
 	EraseRooms()
 
-    local t = eb:GetText()
-    
---     t = [[
--- #YE#BNNEES#R
--- ]]
-	print("Loading this map:")
-    print(t)
-
-    -- if (string.sub(t,1,1) == "$" or string.sub(t,1,1) == "#") then
-    --     print("Importing map from EndlessHallsHelper!")
-    --     return importFromEHH(t)
-    -- end
-
 	local l = string.len(t)
-
-	print("Length:",l)
 	local i = 1
 	while (i <= l) do
-		--Lua seems to strip newlines out of the string when I read
-		-- it, just end rooms with a "-" token to work around it
 		local l1,l2 = string.find(t,"-",i,true)
 		if (l2 == nil) then
 			l2 = l
 		end
 		local line = string.sub(t,i,l2-1)
 		i = l2
-		--print (line)
 
 		local substrings = {}
 		local j=1
@@ -793,7 +855,7 @@ function importMap()
 		local room = {}
 		room.index = tonumber(substrings[1])
 		if (room.index ~= nil) then
-			room.poi_index = tonumber(substrings[2])
+			room.poi_index = tonumber(substrings[2]) or 0
 			room.neighbor_indices = {}
 			for neighbor=1,4 do
 				room.neighbor_indices[neighbor] = tonumber(substrings[2+neighbor])
@@ -804,6 +866,7 @@ function importMap()
 			end
 			room.visited=false
 			room.neighbors={}
+			room.is_trap = (substrings[14] == "T")
 
 			rooms[room.index] = room
 
@@ -811,17 +874,12 @@ function importMap()
 			room.y = tonumber(substrings[12])
 
 			if (substrings[13]=="current") then
-				print ("Current room is ",room.index)
 				current_room = room
 			end
-		else
-			print("Ignoring line '"..line.."'")
 		end
 
 		i = i + 1
-
 	end
-
 
 	for k,v in pairs(rooms) do
 		for neighbor=1,4 do
@@ -846,6 +904,10 @@ function importMap()
 			poirooms[v.poi_index] = v
 		end
 
+		if (v.is_trap) then
+			trapRoom = v
+		end
+
 		createButton(v)
 		recolorRoom(v)
 		setRoomNumber(v)
@@ -855,15 +917,22 @@ function importMap()
 		end
 	end
 
+	updatePOIButtonText()
+end
 
+function importMap()
+	print("WARNING!  You must load the map from the same room as you were when you saved the map")
+	local t = eb:GetText()
+	print("Loading this map:")
+	print(t)
+	importMapFromString(t)
 end
 
 local Exporting_To_EHH = false
 local EHH_Directions = ""
 
-function dumpMap()
-
-	local serialized = "index,poi,north_neighbor,east_neighbor,south_neighbor,west_neighbor,n_wall,e_wall,s_wall,w_wall,x,y,current,-\n"
+local function serializeMap()
+	local serialized = "index,poi,north_neighbor,east_neighbor,south_neighbor,west_neighbor,n_wall,e_wall,s_wall,w_wall,x,y,current,trap,-\n"
 
 	local dirLetters = {"N","E","S","W"}
 	for k,v in pairs(rooms) do
@@ -871,7 +940,6 @@ function dumpMap()
 
 		local neighborString = ""
 		local wallString = ""
-
 		local serializedNeighbors = ""
 		local serializedWalls = ""
 		for i=1,4 do
@@ -894,21 +962,56 @@ function dumpMap()
 		serialized=serialized..serializedNeighbors..serializedWalls
 		serialized=serialized..","..v.x..","..v.y..","
 
-		local curString = ""
 		if (current_room == v) then
 			serialized=serialized.."current,"
-			curString = " (YOU ARE HERE) "
+		else
+			serialized=serialized..","
+		end
+
+		if (v.is_trap) then
+			serialized=serialized.."T,"
 		else
 			serialized=serialized..","
 		end
 
 		serialized=serialized.."-\n"
+	end
+	return serialized
+end
 
-
+function dumpMap()
+	local serialized = serializeMap()
+	local dirLetters = {"N","E","S","W"}
+	for k,v in pairs(rooms) do
+		local curString = (current_room == v) and " (YOU ARE HERE) " or ""
+		local neighborString, wallString = "", ""
+		for i=1,4 do
+			wallString = wallString..dirLetters[i]..":"..(v.walls[i] and "W" or " ")..","
+			neighborString = neighborString..dirLetters[i]..":"..(v.neighbors[i] and tostring(v.neighbors[i].index) or "X")..","
+		end
 		print("Room "..(k)..curString.." POI: ",v.poi_index," N:[",neighborString,"] W:[",wallString,"]")
 	end
 	eb:SetText(serialized)
 end
+
+local function autoSaveMap()
+	if mf == nil or rooms == nil then
+		return
+	end
+	if LucidNightmareNavigatorDB == nil then
+		LucidNightmareNavigatorDB = {}
+	end
+	LucidNightmareNavigatorDB.mapData = serializeMap()
+	LucidNightmareNavigatorDB.last_saved = os.date("%Y-%m-%d %H:%M")
+end
+
+local logoutFrame = CreateFrame("Frame")
+logoutFrame:RegisterEvent("PLAYER_LOGOUT")
+logoutFrame:SetScript("OnEvent", function(self, event)
+	if event == "PLAYER_LOGOUT" then
+		autoSaveMap()
+	end
+end)
 
 local function outputGuidanceToEHH(directions, POIs, targetRoom, startingRoom)
     local steps = (table.getn(directions)-1)
@@ -1022,7 +1125,7 @@ local function navigateToUnexplored()
 					outputGuidance(newDirections)
 					return
 				else
-					if (not n.visited) then
+					if (not n.visited and not n.is_trap) then
 						table.insert(roomstack, n)
 						roomstacksize = roomstacksize + 1
 						table.insert(directionsStack, newDirections)
@@ -1100,7 +1203,7 @@ local function navigateToTarget(targetRoom, startingRoom)
 
 				local n = cur.neighbors[i]
 				local n2 = nil
-				if (n ~= nil and cur.walls[i] == false) then
+				if (n ~= nil and cur.walls[i] == false and (not n.is_trap or n == targetRoom)) then
 					for k,v in pairs(tempDirections) do
 						newDirections[k] = v
 					end
@@ -1138,7 +1241,13 @@ local function navigate()
 	-- Navigates to the nearest unexplored territory, or
 	-- a particular point of interest, based on global "navtarget"
 
-	if (navtarget ~= 11) then
+	if (navtarget == 12) then
+		if (trapRoom ~= nil) then
+			navigateToTarget(trapRoom, current_room)
+		else
+			print("Teleport trap has not been identified yet.")
+		end
+	elseif (navtarget ~= 11) then
 		navigateToTarget(poirooms[navtarget], current_room)
 	else
 		navigateToUnexplored()
@@ -1146,15 +1255,33 @@ local function navigate()
 end
 
 function hitTheTrap()
+    if not last_dir then
+        print("Cannot process trap: no movement recorded yet. Walk somewhere first, then click this button.")
+        return
+    end
+
     local prevRoom = current_room.neighbors[getOppositeDir(last_dir)]
-    prevRoom.neighbors[last_dir] = nil
-    prevRoom.walls[last_dir] = true
-    print("Looks like room " .. prevRoom.index .. "'s " .. direction_strings[last_dir] .. " exit led to the trap.  Marking it as a wall" )
 
-    recolorRoom(prevRoom)
+    if prevRoom then
+        -- Mark the room we just walked into as the teleport trap room
+        current_room.is_trap = true
+        trapRoom = current_room
+        recolorRoom(current_room)
+        print("Room " .. current_room.index .. " marked as the teleport trap room (shown in orange on the map).")
 
-    current_room.neighbors[getOppositeDir(last_dir)] = nil
+        -- Wall off the exit from the previous room that leads into the trap
+        prevRoom.neighbors[last_dir] = nil
+        prevRoom.walls[last_dir] = true
+        print("Room " .. prevRoom.index .. "'s " .. direction_strings[last_dir] .. " exit walled off to avoid the trap.")
+        recolorRoom(prevRoom)
 
+        -- Sever the back-link so the trap room is fully disconnected
+        current_room.neighbors[getOppositeDir(last_dir)] = nil
+    else
+        print("Warning: could not identify the trap room entrance (room already disconnected). Creating a new room for your current position.")
+    end
+
+    -- Create a new disconnected room to represent the unknown post-teleport position
     local r = newRoom()
     local dx, dy = 0, 0
     dy = buttonH + 5
@@ -1238,6 +1365,17 @@ local function setGuidanceClick(self)
 		return
 	end
 
+	if (self.target == 12) then
+		if (trapRoom == nil) then
+			print("Teleport trap has not been identified yet. Walk into the trap room and click 'I just got ported!' to mark it.")
+			return
+		end
+		navtarget = 12
+		updateNavButtonText()
+		navigate()
+		return
+	end
+
 	if (poirooms[self.target] == nil) then
 		print("That target has not been discovered yet.  Navigating to the nearest unexplored territory")
 		navtarget = 11
@@ -1307,7 +1445,7 @@ local function initialize()
 		btn.c = i
 		btn.poi_index = i
 		btn:SetScript("OnClick", setPOIClick)
-		btn:SetText(color_strings[i].." Rune")
+		poi_buttons[i] = btn
 		btn:SetFrameLevel(5)
 
 		btn = ng:New(addonName, "Button", nil, mf)
@@ -1317,11 +1455,10 @@ local function initialize()
 		btn.c = i
 		btn.poi_index = i+5
 		btn:SetScript("OnClick", setPOIClick)
-		btn:SetText(color_strings[i].." Orb")
+		poi_buttons[i + 5] = btn
 		btn:SetFrameLevel(5)
-
-		-- automatic waypoints maybe in future
 	end
+	updatePOIButtonText()
 
 	-- Buttons to add/remove walls
 	for i = 1,4 do
@@ -1356,7 +1493,7 @@ local function initialize()
 	btn:SetText("Navigation Target:")
 	btn:SetFrameLevel(5)
 
-	for i=1,11 do
+	for i=1,12 do
 		local btn = ng:New(addonName, "Button", nil, mf)
 		btn.target = i
 		btn:SetScript("OnClick", setGuidanceClick)
@@ -1366,6 +1503,11 @@ local function initialize()
 		btn:SetPoint("TOPLEFT", mf, "TOPLEFT", 550, -20 * i - 30)
 
 		if (i == 11) then
+			btn:SetSize(130,25)
+			btn:SetPoint("TOPLEFT", mf, "TOPLEFT", 530, -20 * i - 30)
+		end
+
+		if (i == 12) then
 			btn:SetSize(130,25)
 			btn:SetPoint("TOPLEFT", mf, "TOPLEFT", 530, -20 * i - 30)
 		end
@@ -1407,7 +1549,24 @@ local function initialize()
 	btn:SetScript("OnClick", importMap)
 	btn:SetText("Import Map From Box")
 
-	ResetMap()
+	btn = ng:New(addonName, "Button", nil, mf)
+	btn:SetPoint("BOTTOMLEFT", mf, "BOTTOMLEFT", 140, 70)
+	btn:SetSize(140, 18)
+	btn:SetScript("OnClick", newMapClick)
+	btn:SetText("New Map")
+
+	if LucidNightmareNavigatorDB and LucidNightmareNavigatorDB.mapData then
+		local saved = LucidNightmareNavigatorDB.last_saved or "unknown time"
+		print("|cff00ff00Lucid Nightmare Navigator:|r Found a saved map from " .. saved .. ". Loading it...")
+		importMapFromString(LucidNightmareNavigatorDB.mapData)
+		if rooms[1] then
+			last_dir = north
+			setCurrentRoom(rooms[1])
+		end
+	else
+		ResetMap()
+		print("No saved map found. Starting fresh.")
+	end
 
 	ly, lx = UnitPosition("player")
 
@@ -1424,10 +1583,9 @@ local function initialize()
 	print ("-------------")
 	print("The addon is going to watch you and build a map in memory, but since it can't see runes, orbs, or walls, you're going to have to help it out by clicking the buttons to indicate which walls are passable and which have rubble, and which rooms have orbs/runes.")
 	print("Please don't pick up any runes or put them in any orbs until you've found all the runes and orbs with the addon's help.  If you get lost, the addon will guide you to the nearest unexplored path or you can ask it for directions to the nearest node/rune")
-	print("UPDATE OCT 2022: We now know that the maze is 2D, but there's a teleporter trap room.  That means that going into that room will drop you into a random spot on the map")
-	print("Unfortunately old Wonderpants isn't smart enough to figure out a good way to automatically detect that and deal with it, and I'm too lazy to put in a good workaround")
-	print("If you have trouble, I recommend that you use the addon's import/export function to save routes to and from various runes/orbs, then use those partial routes rather than assuming the whole map is OK.  Or you could backtrack across each route as you find it, and then when one backtracking fails, you know you've found the teleport trap.. hoo boy, sounds like a hassle")
-	print("(for what it's worth, I've cleared the maze over a dozen times even with the teleport trap screwing the map up, and it hasn't been TOO bad)")
+	print("UPDATE: There is one teleporter trap room in the maze. When you walk into it and get teleported, click 'I just got ported!' immediately.")
+	print("The trap room will be marked orange on the map, navigation will avoid it automatically, and a 'Teleport Trap' button will appear in the Navigation Target list so you can always find it again.")
+	print("If you get teleported again before clicking the button, just keep walking and use nearby runes/orbs to re-anchor your position on the map.")
 end
 
 -- slash command

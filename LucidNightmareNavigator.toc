@@ -5,6 +5,6 @@
 ## eMail: wpants@hardmodecode.com
 ## DefaultState: Enabled
 ## LoadOnDemand: 0
-## SavedVariables:
+## SavedVariablesPerCharacter: LucidNightmareNavigatorDB
 libs\NyxGUI-1.0\NyxGUI.xml
 LucidNightmareNavigator.lua
