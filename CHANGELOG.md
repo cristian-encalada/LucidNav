@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ## [1.0.0] - 2026-03-13
 
-### Initial Release — LucidNightmareNavigatorEnhanced
+### Initial Release — LucidNav
 
 This release marks the first independent version of the addon, forked and significantly
 enhanced from [LucidNightmareNavigator](https://github.com/Debuggernaut/LucidNightmareNavigator)
@@ -23,7 +23,7 @@ by Wonderpants of Thrall.
 - **MIT License**
 
 ### Changed
-- Renamed addon from `LucidNightmareNavigator` to `LucidNightmareNavigatorEnhanced`
+- Renamed addon from `LucidNightmareNavigator` to `LucidNav`
 - Updated TOC: title, author, email, BattleTag, and SavedVariables key
 - Rewrote README with full feature list, usage guide, controls, notes, and credits
 - Updated `release.sh` to use the new addon name

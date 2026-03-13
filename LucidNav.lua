@@ -552,7 +552,7 @@ local function newMapClick()
 		return
 	end
 	reset_confirmed = false
-	LucidNightmareNavigatorEnhancedDB = {}
+	LucidNavDB = {}
 	ResetMap()
 	updatePOIButtonText()
 	print("Map cleared. Starting fresh.")
@@ -1003,11 +1003,11 @@ local function autoSaveMap()
 	if mf == nil or rooms == nil then
 		return
 	end
-	if LucidNightmareNavigatorEnhancedDB == nil then
-		LucidNightmareNavigatorEnhancedDB = {}
+	if LucidNavDB == nil then
+		LucidNavDB = {}
 	end
-	LucidNightmareNavigatorEnhancedDB.mapData = serializeMap()
-	LucidNightmareNavigatorEnhancedDB.last_saved = os.date("%Y-%m-%d %H:%M")
+	LucidNavDB.mapData = serializeMap()
+	LucidNavDB.last_saved = os.date("%Y-%m-%d %H:%M")
 end
 
 local logoutFrame = CreateFrame("Frame")
@@ -1900,10 +1900,10 @@ local function initialize()
 
 	createGridMap()
 
-	if LucidNightmareNavigatorEnhancedDB and LucidNightmareNavigatorEnhancedDB.mapData then
-		local saved = LucidNightmareNavigatorEnhancedDB.last_saved or "unknown time"
+	if LucidNavDB and LucidNavDB.mapData then
+		local saved = LucidNavDB.last_saved or "unknown time"
 		print("|cff00ff00Lucid Nightmare Navigator Enhanced:|r Found a saved map from " .. saved .. ". Loading it...")
-		importMapFromString(LucidNightmareNavigatorEnhancedDB.mapData)
+		importMapFromString(LucidNavDB.mapData)
 		if rooms[1] then
 			last_dir = north
 			setCurrentRoom(rooms[1])
@@ -1934,7 +1934,7 @@ local function initialize()
 end
 
 -- slash command
-SLASH_LucidNightmareNavigatorEnhanced1 = "/lucid"
-SLASH_LucidNightmareNavigatorEnhanced2 = "/ln"
-SLASH_LucidNightmareNavigatorEnhanced3 = "/lnn"
-SlashCmdList["LucidNightmareNavigatorEnhanced"] = initialize
+SLASH_LucidNav1 = "/lucid"
+SLASH_LucidNav2 = "/ln"
+SLASH_LucidNav3 = "/lnn"
+SlashCmdList["LucidNav"] = initialize
