@@ -528,8 +528,8 @@ local function importMapFromString(t)
     local l = string.len(t)
     local i = 1
     while i <= l do
-        local _,l2 = string.find(t,"-",i,true)
-        if l2 == nil then l2 = l end
+        local _,l2 = string.find(t,"\n",i,true)
+        if l2 == nil then l2 = l+1 end
         local line = string.sub(t,i,l2-1)
         i = l2
 
