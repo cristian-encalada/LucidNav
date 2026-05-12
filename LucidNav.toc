@@ -11,5 +11,9 @@
 
 ## X-Credits: Based on LucidNightmareNavigator by Debuggernaut
 
-libs\NyxGUI-1.0\NyxGUI.xml
+Core\Constants.lua
+Core\RoomEngine.lua
+Core\GridMap.lua
+Core\Dialogs.lua
+Core\MapUI.lua
 LucidNav.lua

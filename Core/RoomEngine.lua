@@ -1,0 +1,895 @@
+local addonName, ns = ...
+local C = ns.C
+
+ns.Engine = ns.Engine or {}
+local Engine = ns.Engine
+
+------------------------------------------------------------
+-- Private state
+------------------------------------------------------------
+local pool         = {}
+local rooms        = {}
+local map          = {}
+local poirooms     = {}
+local trapRoom     = nil
+local current_room = nil
+local last_dir     = nil
+local last_room_number = 0
+local tracking_disabled = false
+local selected_btn = nil   -- currently selected cell Button frame
+local poi_warned   = 0
+
+local pendingJump  = nil   -- set when jump dialog is open
+
+local Exporting_To_EHH = false
+local EHH_Directions   = ""
+
+local navtarget = 11  -- 11=unexplored, 12=trap, 1-5=rune, 6-10=orb
+
+local lx, ly = 0, 0
+
+------------------------------------------------------------
+-- Direction helpers
+------------------------------------------------------------
+local function getOppositeDir(dir)
+    return C.oppositeDir[dir]
+end
+
+local function detectDir(x, y)
+    if     y > -1410 then return C.north
+    elseif y < -1440 then return C.south
+    elseif x <   660 then return C.east
+    elseif x >   720 then return C.west
+    end
+end
+
+local function getRotation(dir)
+    if     dir == C.west  then return 90
+    elseif dir == C.south then return 180
+    elseif dir == C.east  then return 270
+    else                       return 0
+    end
+end
+
+------------------------------------------------------------
+-- Camera
+------------------------------------------------------------
+local function centerCam(cx, cy)
+    local x = C.containerW / 2 + (C.buttonW + 6) * cx
+    local y = C.containerH / 2 + (C.buttonH + 6) * cy
+    ns.scrollframe:SetHorizontalScroll(x - 250 + C.buttonW / 2)
+    ns.scrollframe:SetVerticalScroll(y - 250 + C.buttonH / 2)
+end
+
+------------------------------------------------------------
+-- Visit tracking (used by navigation BFS/DFS)
+------------------------------------------------------------
+local function resetVisited()
+    for _, v in pairs(rooms) do v.visited = false end
+end
+
+------------------------------------------------------------
+-- Selection ring
+------------------------------------------------------------
+local function setSelectedBtn(btn, force)
+    if not force and selected_btn == btn then
+        ns.maze.selMarker:Hide()
+        selected_btn = nil
+    else
+        selected_btn = btn
+        ns.maze.selMarker:ClearAllPoints()
+        ns.maze.selMarker:SetPoint("CENTER", btn, "CENTER")
+        ns.maze.selMarker:Show()
+    end
+    local label = selected_btn and selected_btn.room.index or "None"
+    ns.maze.selected_room_label:SetText("Selected: |cff00ff00" .. label .. "|r")
+end
+
+------------------------------------------------------------
+-- Cell factory (35x35 with edge-click wall toggle)
+------------------------------------------------------------
+local function createCell()
+    local btn = CreateFrame("Button", nil, ns.container)
+    btn:SetSize(C.buttonW, C.buttonH)
+
+    local borderTex = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
+    borderTex:SetAllPoints()
+    borderTex:SetColorTexture(unpack(C.cellColor.border))
+    btn.borderTex = borderTex
+
+    local midTex = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    midTex:SetSize(C.buttonW - C.borderW * 2 - 1, C.buttonH - C.borderH * 2 - 1)
+    midTex:SetColorTexture(unpack(C.cellColor.default))
+    midTex:SetPoint("CENTER")
+    btn.midTex = midTex
+
+    btn.text = btn:CreateFontString(nil, "OVERLAY")
+    btn.text:SetAllPoints()
+    btn.text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+
+    btn.walls = {}
+    for i = 1, 4 do
+        local w = btn:CreateTexture(nil, "OVERLAY")
+        w:SetTexture("interface\\common\\voicechat-muted")
+        w:SetSize(C.blockW, C.blockH)
+        w:Hide()
+        btn.walls[i] = w
+    end
+    btn.walls[C.north]:SetPoint("CENTER", btn, "TOP",    0,          -C.wallInset)
+    btn.walls[C.east]:SetPoint( "CENTER", btn, "RIGHT",  -C.wallInset, 0)
+    btn.walls[C.south]:SetPoint("CENTER", btn, "BOTTOM", 0,           C.wallInset)
+    btn.walls[C.west]:SetPoint( "CENTER", btn, "LEFT",   C.wallInset,  0)
+
+    btn:SetScript("OnClick", function(self, button, isDown)
+        if button ~= "LeftButton" or isDown then return end
+        local cx, cy = GetCursorPosition()
+        local es = ns.maze:GetEffectiveScale()
+        cx, cy = cx / es, cy / es
+        local bl = self:GetLeft(); local br = self:GetRight()
+        local bt = self:GetTop();  local bb = self:GetBottom()
+        if     cx <= bl + C.borderW then Engine.ToggleWall(self, C.west)
+        elseif cx >= br - C.borderW then Engine.ToggleWall(self, C.east)
+        elseif cy >= bt - C.borderH then Engine.ToggleWall(self, C.north)
+        elseif cy <= bb + C.borderH then Engine.ToggleWall(self, C.south)
+        else                             setSelectedBtn(self)
+        end
+    end)
+
+    return btn
+end
+
+local function getUnusedButton()
+    if #pool > 0 then return tremove(pool, 1) end
+    return createCell()
+end
+
+------------------------------------------------------------
+-- Room visual state
+------------------------------------------------------------
+local function setRoomNumber(r)
+    r.button.text:SetFont("Fonts\\FRIZQT__.TTF", r.index < 100 and 10 or 8, "")
+    r.button.text:SetText("|cffeeeeee" .. r.index .. "|r")
+end
+
+local function recolorRoom(r)
+    if not r.button then return end
+    local btn = r.button
+    if r.is_trap then
+        btn.midTex:SetColorTexture(unpack(C.cellColor.trap))
+        btn.borderTex:SetColorTexture(unpack(C.cellColor.trapBorder))
+    elseif r.POI_c then
+        local rgb = C.poi_rgb[r.POI_c]
+        if r.POI_t == "rune" then
+            btn.midTex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
+            btn.borderTex:SetColorTexture(unpack(C.cellColor.borderVisited))
+        else
+            btn.midTex:SetColorTexture(unpack(C.cellColor.visited))
+            btn.borderTex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
+        end
+    else
+        btn.midTex:SetColorTexture(unpack(C.cellColor.visited))
+        btn.borderTex:SetColorTexture(unpack(C.cellColor.borderVisited))
+    end
+    for i = 1, 4 do
+        btn.walls[i]:SetShown(r.walls[i] == true)
+    end
+end
+
+------------------------------------------------------------
+-- Room placement helpers
+------------------------------------------------------------
+local function getMapXY(cx, cy)
+    return C.containerW / 2 + (C.buttonW + 6) * cx,
+           C.containerH / 2 + (C.buttonH + 6) * cy
+end
+
+local function createButton(r)
+    local btn = getUnusedButton()
+    local x, y = getMapXY(r.cx, r.cy)
+    btn:SetPoint("TOPLEFT", ns.container, "TOPLEFT", x, -y)
+    btn.midTex:SetColorTexture(unpack(C.cellColor.default))
+    btn.borderTex:SetColorTexture(unpack(C.cellColor.border))
+    for i = 1, 4 do btn.walls[i]:Hide() end
+    btn.room = r
+    btn:EnableMouse(true)
+    btn:Show()
+    r.button = btn
+end
+
+local function newRoom()
+    local r = {}
+    r.neighbors  = {}
+    r.walls      = {false, false, false, false}
+    r.visited    = false
+    r.index      = #rooms + 1
+    r.poi_index  = 0
+    r.cx         = 0
+    r.cy         = 0
+    rooms[r.index] = r
+    return r
+end
+
+------------------------------------------------------------
+-- Current room + visited dimming
+------------------------------------------------------------
+local function setCurrentRoom(r)
+    if r == nil then return end
+    current_room = r
+
+    for _, v in pairs(rooms) do
+        if v.button then v.button:SetAlpha(0.65) end
+    end
+    r.button:SetAlpha(1)
+    for _, n in pairs(r.neighbors) do
+        if n and n.button then n.button:SetAlpha(1) end
+    end
+
+    centerCam(r.cx, r.cy)
+    ns.playerNav:SetParent(r.button)
+    ns.playerNav:ClearAllPoints()
+    ns.playerNav:SetAllPoints()
+    ns.playerNav.tex:SetRotation(math.rad(getRotation(last_dir or C.north)))
+
+    ns.maze.current_room_label:SetText("Current: |cff00ff00" .. r.index .. "|r")
+    setSelectedBtn(r.button, true)
+
+    if ns.GridMap then ns.GridMap.Refresh() end
+end
+
+------------------------------------------------------------
+-- Jump / room offset helpers
+------------------------------------------------------------
+local function getRoomJumpOffset(baseCX, baseCY, dcx, dcy)
+    local oX, oY = dcx, dcy
+    local function isFree()
+        for _, v in pairs(rooms) do
+            if v.cx == baseCX + oX and v.cy == baseCY + oY then return false end
+        end
+        return true
+    end
+    while not isFree() do oX = oX + dcx; oY = oY + dcy end
+    return oX, oY
+end
+
+local function addRoom(dir, forceJump)
+    local offset = C.coord_offset[dir]
+    local dcx, dcy = offset[1], offset[2]
+
+    if not forceJump then
+        local targetCX = current_room.cx + dcx
+        local targetCY = current_room.cy + dcy
+        for _, v in pairs(rooms) do
+            if v.cx == targetCX and v.cy == targetCY then
+                current_room.neighbors[dir]              = v
+                v.neighbors[getOppositeDir(dir)]         = current_room
+                pendingJump = {dir = dir, existing = v, prev = current_room}
+                if ns.maze and ns.maze.jumpDialog then ns.maze.jumpDialog:Show() end
+                return v
+            end
+        end
+    end
+
+    local r = newRoom()
+    local oX, oY = getRoomJumpOffset(current_room.cx, current_room.cy, dcx, dcy)
+    r.cx = current_room.cx + oX
+    r.cy = current_room.cy + oY
+    r.neighbors[getOppositeDir(dir)] = current_room
+    current_room.neighbors[dir]      = r
+    createButton(r)
+    setRoomNumber(r)
+    return r
+end
+
+------------------------------------------------------------
+-- Erase / Reset
+------------------------------------------------------------
+local function eraseRooms()
+    for _, v in pairs(rooms) do
+        if v.button then
+            v.button:Hide()
+            pool[#pool + 1] = v.button
+        end
+    end
+    wipe(rooms); wipe(map); wipe(poirooms)
+    trapRoom    = nil
+    last_dir    = C.north
+    selected_btn = nil
+    if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
+    if ns.maze and ns.maze.selected_room_label then
+        ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+    end
+end
+
+local function resetMap()
+    eraseRooms()
+    map[1] = newRoom()
+    map[1].cx = 0; map[1].cy = 0
+    last_room_number = 0
+    createButton(map[1])
+    setRoomNumber(map[1])
+    setCurrentRoom(map[1])
+    Engine.UpdatePOIButtonText()
+    Engine.UpdateNavButtonText()
+end
+
+------------------------------------------------------------
+-- BFS queue helpers
+------------------------------------------------------------
+local function qPush(q, min, max, v) q[max+1]=v; return min, max+1 end
+local function qPop(q, min, max)
+    if min>max then return min,max,nil end
+    return min+1, max, q[min]
+end
+local function qEmpty(q, min, max) return min>max end
+
+------------------------------------------------------------
+-- Map deduplication
+------------------------------------------------------------
+local function deDuplicateMap(orig, dupe)
+    if orig == dupe then return end
+    if (orig and orig.is_trap) or (dupe and dupe.is_trap) then
+        print("Skipping map deduplication: one of the rooms is the teleport trap room.")
+        return
+    end
+    local rQ, dQ = {}, {}
+    local r1,r2 = 1,0
+    local d1,d2 = 1,0
+    resetVisited()
+    r1,r2 = qPush(rQ,r1,r2,orig)
+    d1,d2 = qPush(dQ,d1,d2,dupe)
+
+    while not qEmpty(rQ,r1,r2) do
+        local cur, dcur
+        r1,r2,cur  = qPop(rQ,r1,r2)
+        d1,d2,dcur = qPop(dQ,d1,d2)
+        if not cur.visited then
+            cur.visited = true
+            for i = 1,4 do
+                local n  = cur.neighbors[i]
+                local n2 = dcur and dcur.neighbors[i] or nil
+                if n == nil then
+                    if n2 ~= nil then
+                        cur.neighbors[i] = n2
+                        n2.neighbors[getOppositeDir(i)] = cur
+                        r1,r2 = qPush(rQ,r1,r2,n2)
+                        d1,d2 = qPush(dQ,d1,d2,nil)
+                    end
+                else
+                    r1,r2 = qPush(rQ,r1,r2,n)
+                    d1,d2 = qPush(dQ,d1,d2,n2)
+                end
+            end
+            if dcur then
+                dcur.dupedTo = cur
+                if dcur.poi_index ~= 0 then
+                    cur.poi_index = dcur.poi_index
+                    poirooms[cur.poi_index] = cur
+                    print("poi index", cur.poi_index, " was ", dcur.index, " now ", cur.index)
+                end
+                wipe(dcur.neighbors); wipe(dcur.walls)
+                rooms[dcur.index] = nil
+                if dcur.button then
+                    dcur.button:Hide()
+                    pool[#pool+1] = dcur.button
+                end
+            end
+        end
+    end
+    if current_room == dupe then
+        current_room = orig
+        setCurrentRoom(current_room)
+    end
+end
+
+------------------------------------------------------------
+-- Navigation guidance output
+------------------------------------------------------------
+local function outputGuidance(directions)
+    local steps = #directions - 1
+    local navString = ""
+    if navtarget == 11 then
+        if steps ~= 1 then
+            print("Hello, user! I have detected an unexplored room " .. steps .. " steps from here!")
+        else
+            navString = "Unexplored room: "
+        end
+    else
+        if steps ~= 1 then
+            local destStr = ""
+            if navtarget > 5 then
+                destStr = C.color_strings[navtarget-5] .. " Orb"
+            elseif navtarget > 0 then
+                destStr = C.color_strings[navtarget] .. " Rune"
+            end
+            print("Hello, user! I have detected your destination (" .. destStr .. ") " .. steps .. " steps from here!")
+        end
+    end
+    for i = 2, 4 do
+        if directions[i] == nil then
+            navString = navString .. "You will have arrived at your destination!"
+            break
+        end
+        navString = navString .. "Go " .. C.direction_strings[directions[i]] .. ", then "
+        if i == 4 then navString = navString .. "..." end
+    end
+    print(navString)
+end
+
+local function outputGuidanceToEHH(directions, POIs, targetRoom, startingRoom)
+    local dirLetters = {"N","E","S","W"}
+    if targetRoom.poi_index == 11 then
+        print("Error, EHH does not care about unexplored rooms"); return
+    end
+    local navString = "" .. C.EHHPOIStrings[startingRoom.poi_index]
+    for i = 2, #directions do
+        navString = navString .. dirLetters[directions[i]]
+        if POIs[i] ~= 0 then navString = navString .. C.EHHPOIStrings[POIs[i]] end
+    end
+    print(navString)
+    EHH_Directions = EHH_Directions .. navString .. "\n"
+end
+
+local function navigateToTarget(targetRoom, startingRoom)
+    if targetRoom == nil or startingRoom == nil then return end
+    local rQ, dQ, pQ = {},{},{}
+    local r1,r2 = 1,0; local d1,d2=1,0; local p1,p2=1,0
+    resetVisited()
+    r1,r2 = qPush(rQ,r1,r2,startingRoom)
+    d1,d2 = qPush(dQ,d1,d2,{0})
+    p1,p2 = qPush(pQ,p1,p2,{0})
+
+    while not qEmpty(rQ,r1,r2) do
+        local cur, tDir, tPOI
+        r1,r2,cur  = qPop(rQ,r1,r2)
+        d1,d2,tDir = qPop(dQ,d1,d2)
+        p1,p2,tPOI = qPop(pQ,p1,p2)
+        if not cur.visited then
+            cur.visited = true
+            for i = 1,4 do
+                local n = cur.neighbors[i]
+                if n ~= nil and cur.walls[i] == false and (not n.is_trap or n == targetRoom) then
+                    local nDir, nPOI = {}, {}
+                    for k,v in pairs(tDir) do nDir[k]=v end; nDir[#nDir+1]=i
+                    for k,v in pairs(tPOI) do nPOI[k]=v end; nPOI[#nPOI+1]=n.poi_index
+                    if n == targetRoom then
+                        if Exporting_To_EHH then outputGuidanceToEHH(nDir,nPOI,targetRoom,startingRoom)
+                        else outputGuidance(nDir) end
+                        return
+                    end
+                    r1,r2 = qPush(rQ,r1,r2,n)
+                    d1,d2 = qPush(dQ,d1,d2,nDir)
+                    p1,p2 = qPush(pQ,p1,p2,nPOI)
+                end
+            end
+        end
+    end
+    print("No route from current room to target found, keep wandering until you hit a known POI so you can reattach to the rest of the map")
+end
+
+local function navigateToUnexplored()
+    local stack, dstack, sz = {}, {}, 0
+    resetVisited()
+    table.insert(stack,current_room); sz=sz+1
+    table.insert(dstack,{0})
+
+    while sz > 0 do
+        local cur = table.remove(stack,1); sz=sz-1
+        cur.visited = true
+        local td   = table.remove(dstack,1)
+        for i = 1,4 do
+            if not cur.walls[i] then
+                local nd = {}; for k,v in pairs(td) do nd[k]=v end; nd[#nd+1]=i
+                local n = cur.neighbors[i]
+                if n == nil then outputGuidance(nd); return
+                elseif not n.visited and not n.is_trap then
+                    table.insert(stack,n); sz=sz+1
+                    table.insert(dstack,nd)
+                end
+            end
+        end
+    end
+    print("Hmm, that's odd, according to this you have no unexplored territory..")
+end
+
+local function navigate()
+    if navtarget == 12 then
+        if trapRoom ~= nil then navigateToTarget(trapRoom, current_room)
+        else print("Teleport trap has not been identified yet.") end
+    elseif navtarget ~= 11 then
+        navigateToTarget(poirooms[navtarget], current_room)
+    else
+        navigateToUnexplored()
+    end
+end
+
+------------------------------------------------------------
+-- Serialization
+------------------------------------------------------------
+local function serializeMap()
+    local out = "index,poi,north_neighbor,east_neighbor,south_neighbor,west_neighbor,n_wall,e_wall,s_wall,w_wall,cx,cy,current,trap,-\n"
+    for _, v in pairs(rooms) do
+        out = out .. v.index .. "," .. v.poi_index
+        local sN, sW = "", ""
+        for i = 1,4 do
+            sN = sN .. (v.neighbors[i] and ("," .. v.neighbors[i].index) or ", ")
+            sW = sW .. (v.walls[i] and ",W" or ", ")
+        end
+        out = out .. sN .. sW
+        out = out .. "," .. v.cx .. "," .. v.cy .. ","
+        out = out .. (current_room == v and "current," or ",")
+        out = out .. (v.is_trap and "T," or ",")
+        out = out .. "-\n"
+    end
+    return out
+end
+
+local function importMapFromString(t)
+    eraseRooms()
+    local l = string.len(t)
+    local i = 1
+    while i <= l do
+        local _,l2 = string.find(t,"-",i,true)
+        if l2 == nil then l2 = l end
+        local line = string.sub(t,i,l2-1)
+        i = l2
+
+        local sub, j = {}, 1
+        local ll = string.len(line)
+        while j <= ll do
+            local _,t2 = string.find(line,",",j,true)
+            if t2 == nil then t2 = ll+1 end
+            sub[#sub+1] = string.sub(line,j,t2-1)
+            j = t2 + 1
+        end
+
+        local room = {}
+        room.index = tonumber(sub[1])
+        if room.index ~= nil then
+            room.poi_index = tonumber(sub[2]) or 0
+            room.neighbor_indices = {}
+            for nb = 1,4 do room.neighbor_indices[nb] = tonumber(sub[2+nb]) end
+            room.walls = {false,false,false,false}
+            for w = 1,4 do room.walls[w] = (sub[6+w]=="W") end
+            room.visited   = false
+            room.neighbors = {}
+            room.is_trap   = (sub[14]=="T")
+
+            local rawCX = tonumber(sub[11])
+            local rawCY = tonumber(sub[12])
+            -- Detect old pixel-based format (|value| > 1000 means old 50k container)
+            if rawCX ~= nil and math.abs(rawCX) > 1000 then
+                room.cx = math.floor((rawCX - C.oldContainerW/2) / C.oldButtonStep + 0.5)
+                room.cy = math.floor((rawCY - C.oldContainerW/2) / C.oldButtonStep + 0.5)
+            else
+                room.cx = rawCX or 0
+                room.cy = rawCY or 0
+            end
+
+            rooms[room.index] = room
+            if sub[13] == "current" then current_room = room end
+        end
+        i = i + 1
+    end
+
+    for _, v in pairs(rooms) do
+        for nb = 1,4 do
+            local ni = v.neighbor_indices[nb]
+            if ni ~= nil then
+                if rooms[ni] == nil then
+                    print("Error: room", v.index, "references missing room", ni)
+                else
+                    v.neighbors[nb] = rooms[ni]
+                end
+            end
+        end
+        if v.poi_index > 5 then
+            v.POI_c = v.poi_index - 5; v.POI_t = "orb"
+            poirooms[v.poi_index] = v
+        elseif v.poi_index > 0 then
+            v.POI_c = v.poi_index; v.POI_t = "rune"
+            poirooms[v.poi_index] = v
+        end
+        if v.is_trap then trapRoom = v end
+        createButton(v)
+        recolorRoom(v)
+        setRoomNumber(v)
+        if v == current_room then setCurrentRoom(v) end
+    end
+    Engine.UpdatePOIButtonText()
+    Engine.UpdateNavButtonText()
+end
+
+local logoutFrame = CreateFrame("Frame")
+logoutFrame:RegisterEvent("PLAYER_LOGOUT")
+logoutFrame:SetScript("OnEvent", function(self, event)
+    if event ~= "PLAYER_LOGOUT" then return end
+    if rooms == nil then return end
+    if LucidNavDB == nil then LucidNavDB = {} end
+    LucidNavDB.mapData   = serializeMap()
+    LucidNavDB.last_saved = os.date("%Y-%m-%d %H:%M")
+end)
+
+------------------------------------------------------------
+-- EHH export
+------------------------------------------------------------
+local function exportEHH()
+    Exporting_To_EHH = true
+    EHH_Directions = ""
+    local foundPOIs = {}
+    for i = 1,10 do if poirooms[i] ~= nil then foundPOIs[#foundPOIs+1]=i end end
+    if #foundPOIs < 2 then
+        print("Error: need at least 2 POIs marked to export to EndlessHallsHelper")
+        Exporting_To_EHH = false; return
+    end
+    for i = 1, #foundPOIs-1 do
+        for j = i+1, #foundPOIs do
+            navigateToTarget(poirooms[foundPOIs[j]], poirooms[foundPOIs[i]])
+        end
+    end
+    print("Routes exported. CTRL+A, CTRL+C to copy, then paste at nightswimmer.github.io/EndlessHalls")
+    if ns.eb then ns.eb:SetText(EHH_Directions) end
+    Exporting_To_EHH = false
+end
+
+------------------------------------------------------------
+-- POI click (operates on selected room or current room)
+------------------------------------------------------------
+local function getTargetRoom()
+    return (selected_btn and selected_btn.room) or current_room
+end
+
+local function setPOIClick(self)
+    local target = getTargetRoom()
+    if not target then return end
+
+    if self.poi_index == nil then
+        -- Clear button
+        if poirooms[target.poi_index] ~= nil then poirooms[target.poi_index] = nil end
+        target.POI_t = nil; target.POI_c = nil; target.poi_index = 0
+        recolorRoom(target)
+        Engine.UpdatePOIButtonText()
+        return
+    end
+
+    if poirooms[self.poi_index] == target then return end
+
+    if poirooms[self.poi_index] ~= nil and poi_warned ~= self.poi_index then
+        print("WOAH WOAH WOAH, this point of interest was already defined as room " ..
+              poirooms[self.poi_index].index ..
+              "! Click again to confirm a loop in the map and de-duplicate nodes")
+        poi_warned = self.poi_index; return
+    end
+    poi_warned = 0
+
+    if poirooms[self.poi_index] ~= nil then
+        deDuplicateMap(poirooms[self.poi_index], target)
+    else
+        if poirooms[target.poi_index] ~= nil then poirooms[target.poi_index] = nil end
+        poirooms[self.poi_index] = target
+        target.poi_index = self.poi_index
+        target.POI_t     = self.t
+        target.POI_c     = self.c
+        recolorRoom(target)
+    end
+
+    local found = 0
+    for i=1,10 do if poirooms[i] ~= nil then found=found+1 end end
+    if found == 10 then
+        print("|cff00ff00All 5 runes and 5 orbs have been marked!|r You can now start matching orbs to runes.")
+    end
+    Engine.UpdatePOIButtonText()
+    if ns.GridMap then ns.GridMap.Refresh() end
+end
+
+------------------------------------------------------------
+-- Main OnUpdate
+------------------------------------------------------------
+local function onUpdate()
+    local y, x = UnitPosition("player")
+    ns.playerNav.tex:SetRotation(GetPlayerFacing())
+
+    if not tracking_disabled and current_room and (math.abs(x-lx) > 70 or math.abs(y-ly) > 70) then
+        local dir = detectDir(lx, ly)
+        if dir then
+            last_dir = dir
+            setCurrentRoom(current_room.neighbors[dir] or addRoom(dir))
+            navigate()
+        end
+    end
+    lx = x; ly = y
+
+    if ns.maze.x_label then
+        ns.maze.x_label:SetText("X: |cff00ff00" .. math.floor(x) .. "|r")
+        ns.maze.y_label:SetText("Y: |cff00ff00" .. math.floor(y) .. "|r")
+    end
+
+    -- Right-click pan: read drag state set by scrollframe's OnMouseDown
+    local sf = ns.scrollframe
+    if sf and sf.dragging_camera then
+        local cur_x, cur_y = GetCursorPosition()
+        if cur_x ~= sf.cursor_x then
+            sf:SetHorizontalScroll(sf.last_horiz + sf.cursor_x - cur_x)
+        end
+        if cur_y ~= sf.cursor_y then
+            sf:SetVerticalScroll(sf.last_vert + cur_y - sf.cursor_y)
+        end
+    end
+end
+
+------------------------------------------------------------
+-- Public API
+------------------------------------------------------------
+function Engine.Init()
+    tracking_disabled = false
+    resetMap()
+    ly, lx = UnitPosition("player")
+    ns.maze:SetScript("OnUpdate", onUpdate)
+end
+
+function Engine.LoadSavedMap()
+    if LucidNavDB and LucidNavDB.mapData then
+        local saved = LucidNavDB.last_saved or "unknown time"
+        print("|cff00ff00LucidNav:|r Found a saved map from " .. saved .. ". Loading it...")
+        importMapFromString(LucidNavDB.mapData)
+        if rooms[1] then last_dir = C.north; setCurrentRoom(rooms[1]) end
+    else
+        resetMap()
+        print("No saved map found. Starting fresh.")
+    end
+    print("Right-click drag to pan the map. Click a room center to select it. Click an edge to toggle a wall.")
+end
+
+function Engine.ResetMap()
+    LucidNavDB = {}
+    resetMap()
+    print("Map cleared. Starting fresh.")
+end
+
+function Engine.SetCurrentRoom(room)
+    setCurrentRoom(room)
+end
+
+function Engine.ToggleWall(btn, dir)
+    local r = btn.room
+    r.walls[dir] = not r.walls[dir]
+    recolorRoom(r)
+end
+
+function Engine.SetPOI(self)
+    setPOIClick(self)
+end
+
+function Engine.SetGuidance(self)
+    if self.target == 11 then
+        navtarget = 11
+        Engine.UpdateNavButtonText(); navigate(); return
+    end
+    if self.target == 12 then
+        if trapRoom == nil then
+            print("Teleport trap has not been identified yet."); return
+        end
+        navtarget = 12
+        Engine.UpdateNavButtonText(); navigate(); return
+    end
+    if poirooms[self.target] == nil then
+        print("That target has not been discovered yet. Navigating to the nearest unexplored territory")
+        navtarget = 11
+    else
+        navtarget = self.target
+    end
+    Engine.UpdateNavButtonText(); navigate()
+end
+
+function Engine.HitTheTrap()
+    if not last_dir then
+        print("Cannot process trap: no movement recorded yet. Walk somewhere first."); return
+    end
+    local prevRoom = current_room.neighbors[getOppositeDir(last_dir)]
+    if prevRoom then
+        current_room.is_trap = true; trapRoom = current_room
+        recolorRoom(current_room)
+        print("Room " .. current_room.index .. " marked as the teleport trap room (orange on map).")
+        prevRoom.neighbors[last_dir] = nil; prevRoom.walls[last_dir] = true
+        print("Room " .. prevRoom.index .. "'s " .. C.direction_strings[last_dir] .. " exit walled off.")
+        recolorRoom(prevRoom)
+        current_room.neighbors[getOppositeDir(last_dir)] = nil
+    else
+        print("Warning: could not identify the trap room entrance. Creating new room for current position.")
+    end
+    local r = newRoom()
+    local oX, oY = getRoomJumpOffset(current_room.cx, current_room.cy, 0, 1)
+    r.cx = current_room.cx + oX; r.cy = current_room.cy + oY
+    createButton(r); setRoomNumber(r); setCurrentRoom(r)
+    Engine.UpdateNavButtonText()
+end
+
+function Engine.ExportEHH()   exportEHH() end
+function Engine.DumpMap()
+    if ns.eb then ns.eb:SetText(serializeMap()) end
+end
+function Engine.ImportMap()
+    if not ns.eb then return end
+    print("WARNING! You must load the map from the same room as you were when you saved the map")
+    local t = ns.eb:GetText()
+    print("Loading this map:"); print(t)
+    importMapFromString(t)
+end
+
+function Engine.SetTracking(enabled) tracking_disabled = not enabled end
+function Engine.CenterCamera()
+    if current_room then centerCam(current_room.cx, current_room.cy) end
+end
+
+function Engine.JumpOver()
+    if not pendingJump then return end
+    local dir = pendingJump.dir
+    pendingJump.prev.neighbors[dir] = nil
+    pendingJump.existing.neighbors[getOppositeDir(dir)] = nil
+    current_room = pendingJump.prev
+    pendingJump  = nil
+    setCurrentRoom(addRoom(dir, true))
+end
+
+function Engine.KeepLinked()
+    pendingJump = nil
+end
+
+function Engine.GetSelectedRoom()
+    return selected_btn and selected_btn.room or nil
+end
+
+function Engine.SetPlayerToSelected()
+    local r = Engine.GetSelectedRoom()
+    if r then setCurrentRoom(r) end
+end
+
+function Engine.GetCurrentRoom()  return current_room end
+function Engine.GetRooms()        return rooms end
+function Engine.GetPoiRooms()     return poirooms end
+function Engine.GetTrapRoom()     return trapRoom end
+function Engine.GetNavTarget()    return navtarget end
+
+function Engine.UpdatePOIButtonText()
+    if not (ns.maze and ns.maze.poi_buttons) then return end
+    local poi_buttons = ns.maze.poi_buttons
+    for i = 1, 5 do
+        local runeTex = poi_buttons[i]
+        local orbTex  = poi_buttons[i+5]
+        local rgb = C.poi_rgb[i]
+        if runeTex then
+            if poirooms[i] ~= nil then
+                runeTex:SetVertexColor(rgb[1]*0.4, rgb[2]*0.4, rgb[3]*0.4)
+            else
+                runeTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
+            end
+        end
+        if orbTex then
+            if poirooms[i+5] ~= nil then
+                orbTex:SetVertexColor(rgb[1]*0.4, rgb[2]*0.4, rgb[3]*0.4)
+            else
+                orbTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
+            end
+        end
+    end
+end
+
+function Engine.UpdateNavButtonText()
+    if not (ns.maze and ns.maze.guidance_buttons) then return end
+    local guidance_buttons = ns.maze.guidance_buttons
+    for i = 1, 12 do
+        local btn = guidance_buttons[i]
+        if not btn then break end
+        local text
+        if i == 11 then
+            text = "Unexplored Territory"
+        elseif i == 12 then
+            text = "Teleport Trap"
+        elseif i > 5 then
+            text = "|cff" .. C.poi_hex_colors[i-5] .. C.color_strings[i-5] .. " Orb|r"
+        else
+            text = "|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. " Rune|r"
+        end
+        if i == navtarget then text = "[" .. text .. "]" end
+        btn:SetText(text)
+    end
+end
