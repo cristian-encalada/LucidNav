@@ -100,7 +100,8 @@ end
 ------------------------------------------------------------
 local function buildNavArrow(sf, cont)
     local nav = CreateFrame("Frame", nil, sf)
-    nav:SetAllPoints()
+    nav:SetSize(20, 20)
+    nav:SetPoint("CENTER")
     nav.tex = nav:CreateTexture(nil, "OVERLAY")
     nav.tex:SetAllPoints()
     nav.tex:SetTexture(C.player_icon)

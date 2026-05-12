@@ -107,7 +107,7 @@ end
 -- Help dialog
 ------------------------------------------------------------
 local function buildHelpDialog(mazeFrame)
-    local dlg = makeDialog(addonName.."HelpDialog", mazeFrame, 500, 250)
+    local dlg = makeDialog(addonName.."HelpDialog", mazeFrame, 500, 310)
     dlg:SetPoint("CENTER", UIParent, "CENTER")
     makeTitle(dlg, "Lucid Nightmare Navigator — Help")
 
@@ -119,7 +119,9 @@ local function buildHelpDialog(mazeFrame)
         "Click an EDGE of a room to toggle that wall.\n" ..
         "Click a colored Rune/Orb button on the right panel to mark the selected (or current) room as that POI.|r\n\n" ..
         "|cffffff00How do I mark the teleport trap?|r\n" ..
-        "|cffeeeeffWhen you get ported, immediately click 'I got ported!'. The trap room turns orange.|r"
+        "|cffeeeeffWhen you get ported, immediately click 'I got ported!'. The trap room turns orange.|r\n\n" ..
+        "|cffffff00What happens after a disconnect or logout?|r\n" ..
+        "|cffeeeeffYou always respawn at Room 1 (the entrance). The addon resets your position there automatically — your map is preserved.|r"
     )
     body:SetJustifyH("LEFT")
     body:SetJustifyV("TOP")
