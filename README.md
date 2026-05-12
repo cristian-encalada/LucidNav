@@ -22,7 +22,7 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 - **Compass rose** — N/S/E/W overlay on the map canvas for cardinal direction reference
 - **Live player coordinates** — X/Y world position displayed in the header, updated in real time
 - **Teleport trap handling** — automatically tracks and highlights the teleport trap room (orange)
-- **Persistent map** — maze progress saved on logout and restored on login at room 1
+- **Persistent map** — maze progress saved on logout; on proper logout you respawn at room 1, on crash/DC you return to your last room
 
 ---
 
@@ -51,7 +51,9 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 - Do **not extinguish runes early** — they are essential navigation landmarks
 - Use navigation to reach **unexplored rooms first**
 - The teleport trap is marked in **orange** and navigation avoids routing through it
-- After a disconnect or logout you always respawn at **room 1** — the addon knows this and resets your position accordingly
+- **Proper logout** (20-second timer): you respawn at Room 1 — the addon resets your position automatically
+- **Force-close / crash / DC**: you return to your last room. Walk to a known room and use **Set Player Loc** to correct your position
+- The maze **resets every daily reset** — finish your run before the server reset!
 
 ---
 

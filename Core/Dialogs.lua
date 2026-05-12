@@ -107,7 +107,7 @@ end
 -- Help dialog
 ------------------------------------------------------------
 local function buildHelpDialog(mazeFrame)
-    local dlg = makeDialog(addonName.."HelpDialog", mazeFrame, 500, 310)
+    local dlg = makeDialog(addonName.."HelpDialog", mazeFrame, 500, 410)
     dlg:SetPoint("CENTER", UIParent, "CENTER")
     makeTitle(dlg, "Lucid Nightmare Navigator — Help")
 
@@ -120,8 +120,14 @@ local function buildHelpDialog(mazeFrame)
         "Click a colored Rune/Orb button on the right panel to mark the selected (or current) room as that POI.|r\n\n" ..
         "|cffffff00How do I mark the teleport trap?|r\n" ..
         "|cffeeeeffWhen you get ported, immediately click 'I got ported!'. The trap room turns orange.|r\n\n" ..
-        "|cffffff00What happens after a disconnect or logout?|r\n" ..
-        "|cffeeeeffYou always respawn at Room 1 (the entrance). The addon resets your position there automatically — your map is preserved.|r"
+        "|cffffff00What happens after a logout or crash?|r\n" ..
+        "|cffeeeeffProper logout (20-second timer): you respawn at Room 1. The addon resets your position automatically.\n" ..
+        "Force-close / crash / DC: you return to your last room in the maze. Walk back to a known room and use 'Set Player Loc' to correct your position.\n" ..
+        "The maze resets every daily reset — finish before the server reset!|r\n\n" ..
+        "|cffffff00Tips for solving the maze|r\n" ..
+        "|cffeeeeff• Do NOT extinguish runes early — they are essential navigation landmarks.\n" ..
+        "• Use navigation to reach unexplored rooms first.\n" ..
+        "• The teleport trap is marked in orange — navigation avoids routing through it.|r"
     )
     body:SetJustifyH("LEFT")
     body:SetJustifyV("TOP")

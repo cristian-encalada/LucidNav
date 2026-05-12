@@ -107,6 +107,13 @@ local function createCell()
     btn.text:SetAllPoints()
     btn.text:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
 
+    local skull = btn:CreateTexture(nil, "OVERLAY")
+    skull:SetTexture("interface\\targetingframe\\UI-RaidTargetingIcon_8")
+    skull:SetSize(18, 18)
+    skull:SetPoint("CENTER")
+    skull:Hide()
+    btn.skullTex = skull
+
     btn.walls = {}
     for i = 1, 4 do
         local w = btn:CreateTexture(nil, "OVERLAY")
@@ -154,6 +161,7 @@ end
 local function recolorRoom(r)
     if not r.button then return end
     local btn = r.button
+    btn.skullTex:SetShown(r.is_trap == true)
     if r.is_trap then
         btn.midTex:SetColorTexture(unpack(C.cellColor.trap))
         btn.borderTex:SetColorTexture(unpack(C.cellColor.trapBorder))
