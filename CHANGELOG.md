@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.2.0] - 2026-06-16
+
+### Added
+- **Undo** — in-memory history stack (up to 20 steps). Each new room mapped, dedup, trap mark, jump-over, and full reset can be reverted. Trigger via the new toolbar Undo button or `/ln undo`.
+- **Right-click room menu** — right-click any room cell for: *Set as current room*, *Unlink neighbor* (per-direction submenu), *Detach (unlink all neighbors)*, and *Undo last action*. Lets you correct mis-marked rooms or wrong neighbor links without resetting the whole map (requested by skyrunner1833).
+- New modules `Core/History.lua` and `Core/RoomMenu.lua`.
+- WoW 12.0.7 interface version (`120007`) added to TOC.
+
+### Fixed
+- **Map deduplication no longer leaves orphan rooms.** The "WOAH WOAH WOAH" POI dedup is now a two-phase pass (gather, then apply) with a global neighbor-pointer rebind, so collapsing a loop never strands rooms or leaves stale links on the grid map.
+
+### Changed
+- Refactored serialization/import/erase into public `Engine` API; added `Engine.UnlinkNeighbor`, `Engine.DetachRoom`, `Engine.SetSelectedByIndex`.
+- Right-click menu uses the modern `MenuUtil` API (with an `EasyMenu` fallback for older clients).
+- Project now tracks design intent under `openspec/` (OpenSpec change proposal, tasks, and source-of-truth specs).
+
+---
+
+## [1.1.0] - 2026-06-15
+
+### Changed
+- Refactored the addon into a modular `Core/` architecture with UI enhancements.
+- Shrank the player arrow and polished the map UI; updated README with new screenshot and UI credits.
+- Clarified logout/crash respawn behavior in the help dialog and added a daily-reset warning.
+
+### Fixed
+- Save/load: rooms with negative coordinates were lost on reload.
+
+---
+
 ## [1.0.1] - 2026-04-21
 
 ### Changed
