@@ -127,7 +127,12 @@ local function createCell()
     btn.walls[C.south]:SetPoint("CENTER", btn, "BOTTOM", 0,           C.wallInset)
     btn.walls[C.west]:SetPoint( "CENTER", btn, "LEFT",   C.wallInset,  0)
 
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     btn:SetScript("OnClick", function(self, button, isDown)
+        if button == "RightButton" then
+            if self.room and ns.RoomMenu then ns.RoomMenu.Show(self.room) end
+            return
+        end
         if button ~= "LeftButton" or isDown then return end
         local cx, cy = GetCursorPosition()
         local es = ns.maze:GetEffectiveScale()
@@ -264,6 +269,10 @@ local function addRoom(dir, forceJump)
     local offset = C.coord_offset[dir]
     local dcx, dcy = offset[1], offset[2]
 
+    -- Snapshot before any mapping mutation so Undo reverts this single step.
+    -- (forceJump comes from JumpOver, which already snapshotted "Jump over".)
+    if not forceJump and ns.History then ns.History.Snapshot("Map room") end
+
     if not forceJump then
         local targetCX = current_room.cx + dcx
         local targetCY = current_room.cy + dcy
@@ -340,10 +349,18 @@ local function deDuplicateMap(orig, dupe)
         print("Skipping map deduplication: one of the rooms is the teleport trap room.")
         return
     end
+    if ns.History then ns.History.Snapshot("Dedup") end
+
+    ----------------------------------------------------------
+    -- Phase 1 — gather (walk in parallel, mutate nothing)
+    ----------------------------------------------------------
+    local visitedOrig, visitedDupe = {}, {}
+    local grafts  = {}   -- {cur, dir, newNeighbor}
+    local dupeMap = {}   -- dupeRoom -> origRoom
+
     local rQ, dQ = {}, {}
     local r1,r2 = 1,0
     local d1,d2 = 1,0
-    resetVisited()
     r1,r2 = qPush(rQ,r1,r2,orig)
     d1,d2 = qPush(dQ,d1,d2,dupe)
 
@@ -351,15 +368,20 @@ local function deDuplicateMap(orig, dupe)
         local cur, dcur
         r1,r2,cur  = qPop(rQ,r1,r2)
         d1,d2,dcur = qPop(dQ,d1,d2)
-        if not cur.visited then
-            cur.visited = true
+
+        -- Skip if we've already processed this pairing on either side
+        if not visitedOrig[cur] and not (dcur and visitedDupe[dcur]) then
+            visitedOrig[cur] = true
+            if dcur then
+                visitedDupe[dcur] = true
+                dupeMap[dcur] = cur
+            end
             for i = 1,4 do
                 local n  = cur.neighbors[i]
                 local n2 = dcur and dcur.neighbors[i] or nil
                 if n == nil then
                     if n2 ~= nil then
-                        cur.neighbors[i] = n2
-                        n2.neighbors[getOppositeDir(i)] = cur
+                        grafts[#grafts+1] = {cur, i, n2}
                         r1,r2 = qPush(rQ,r1,r2,n2)
                         d1,d2 = qPush(dQ,d1,d2,nil)
                     end
@@ -368,26 +390,76 @@ local function deDuplicateMap(orig, dupe)
                     d1,d2 = qPush(dQ,d1,d2,n2)
                 end
             end
-            if dcur then
-                dcur.dupedTo = cur
-                if dcur.poi_index ~= 0 then
-                    cur.poi_index = dcur.poi_index
-                    poirooms[cur.poi_index] = cur
-                    print("poi index", cur.poi_index, " was ", dcur.index, " now ", cur.index)
-                end
-                wipe(dcur.neighbors); wipe(dcur.walls)
-                rooms[dcur.index] = nil
-                if dcur.button then
-                    dcur.button:Hide()
-                    pool[#pool+1] = dcur.button
+        end
+    end
+
+    ----------------------------------------------------------
+    -- Phase 2 — apply (mutate everything)
+    ----------------------------------------------------------
+    -- 2a. Apply grafts (link orig-tree gaps to surviving dupe-tree branches)
+    for _, g in ipairs(grafts) do
+        local cur, i, n2 = g[1], g[2], g[3]
+        cur.neighbors[i] = n2
+        n2.neighbors[getOppositeDir(i)] = cur
+    end
+
+    -- 2b. Global pointer rebind: kill any pointer that still aims at a dupe
+    for _, v in pairs(rooms) do
+        for i = 1,4 do
+            local target = v.neighbors[i]
+            if target and dupeMap[target] then
+                v.neighbors[i] = dupeMap[target]
+            end
+        end
+    end
+
+    -- 2c. Transfer POIs (cur wins on conflict)
+    for dcur, cur in pairs(dupeMap) do
+        if dcur.poi_index ~= 0 then
+            if cur.poi_index == 0 then
+                cur.poi_index = dcur.poi_index
+                cur.POI_c     = dcur.POI_c
+                cur.POI_t     = dcur.POI_t
+                poirooms[cur.poi_index] = cur
+                recolorRoom(cur)
+            else
+                -- conflict: cur already has a POI; drop the dupe's
+                if poirooms[dcur.poi_index] == dcur then
+                    poirooms[dcur.poi_index] = nil
                 end
             end
         end
     end
-    if current_room == dupe then
-        current_room = orig
-        setCurrentRoom(current_room)
+
+    -- 2d. Remove dupes from the map
+    for dcur in pairs(dupeMap) do
+        wipe(dcur.neighbors); wipe(dcur.walls)
+        rooms[dcur.index] = nil
+        if dcur.button then
+            dcur.button:Hide()
+            dcur.button.room = nil
+            pool[#pool+1] = dcur.button
+            dcur.button = nil
+        end
     end
+
+    -- 2e. Reassign current_room if it was a dupe
+    if dupeMap[current_room] then
+        current_room = dupeMap[current_room]
+    end
+    if current_room then setCurrentRoom(current_room) end
+
+    -- 2f. Clear selection if it pointed at a wiped room
+    if selected_btn and selected_btn.room == nil then
+        selected_btn = nil
+        if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
+        if ns.maze and ns.maze.selected_room_label then
+            ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+        end
+    end
+
+    -- 2g. Refresh grid view
+    if ns.GridMap then ns.GridMap.Refresh() end
 end
 
 ------------------------------------------------------------
@@ -514,7 +586,7 @@ end
 ------------------------------------------------------------
 -- Serialization
 ------------------------------------------------------------
-local function serializeMap()
+function Engine.SerializeMap()
     local out = "index,poi,north_neighbor,east_neighbor,south_neighbor,west_neighbor,n_wall,e_wall,s_wall,w_wall,cx,cy,current,trap,-\n"
     for _, v in pairs(rooms) do
         out = out .. v.index .. "," .. v.poi_index
@@ -532,7 +604,7 @@ local function serializeMap()
     return out
 end
 
-local function importMapFromString(t)
+function Engine.ImportMap(t)
     eraseRooms()
     local l = string.len(t)
     local i = 1
@@ -614,7 +686,7 @@ logoutFrame:SetScript("OnEvent", function(self, event)
     if event ~= "PLAYER_LOGOUT" then return end
     if rooms == nil then return end
     if LucidNavDB == nil then LucidNavDB = {} end
-    LucidNavDB.mapData   = serializeMap()
+    LucidNavDB.mapData   = Engine.SerializeMap()
     LucidNavDB.last_saved = os.date("%Y-%m-%d %H:%M")
 end)
 
@@ -739,7 +811,7 @@ function Engine.LoadSavedMap()
     if LucidNavDB and LucidNavDB.mapData then
         local saved = LucidNavDB.last_saved or "unknown time"
         print("|cff00ff00LucidNav:|r Found a saved map from " .. saved .. ". Loading it...")
-        importMapFromString(LucidNavDB.mapData)
+        Engine.ImportMap(LucidNavDB.mapData)
         if rooms[1] then last_dir = C.north; setCurrentRoom(rooms[1]) end
     else
         resetMap()
@@ -749,6 +821,8 @@ function Engine.LoadSavedMap()
 end
 
 function Engine.ResetMap()
+    -- Snapshot the pre-wipe map so a full reset stays undoable.
+    if ns.History then ns.History.Snapshot("Reset") end
     LucidNavDB = {}
     resetMap()
     print("Map cleared. Starting fresh.")
@@ -793,6 +867,7 @@ function Engine.HitTheTrap()
     if not last_dir then
         print("Cannot process trap: no movement recorded yet. Walk somewhere first."); return
     end
+    if ns.History then ns.History.Snapshot("Trap") end
     local prevRoom = current_room.neighbors[getOppositeDir(last_dir)]
     if prevRoom then
         current_room.is_trap = true; trapRoom = current_room
@@ -814,14 +889,40 @@ end
 
 function Engine.ExportEHH()   exportEHH() end
 function Engine.DumpMap()
-    if ns.eb then ns.eb:SetText(serializeMap()) end
+    if ns.eb then ns.eb:SetText(Engine.SerializeMap()) end
 end
-function Engine.ImportMap()
+function Engine.ImportMapFromEditbox()
     if not ns.eb then return end
     print("WARNING! You must load the map from the same room as you were when you saved the map")
     local t = ns.eb:GetText()
     print("Loading this map:"); print(t)
-    importMapFromString(t)
+    Engine.ImportMap(t)
+end
+
+function Engine.EraseRooms() eraseRooms() end
+
+function Engine.SetSelectedByIndex(idx)
+    if idx == nil then return end
+    local r = rooms[idx]
+    if r and r.button then setSelectedBtn(r.button, true) end
+end
+
+function Engine.UnlinkNeighbor(room, dir)
+    if not room then return end
+    local n = room.neighbors[dir]
+    room.neighbors[dir] = nil
+    if n then n.neighbors[getOppositeDir(dir)] = nil end
+    if ns.GridMap then ns.GridMap.Refresh() end
+end
+
+function Engine.DetachRoom(room)
+    if not room then return end
+    for i = 1,4 do
+        local n = room.neighbors[i]
+        room.neighbors[i] = nil
+        if n then n.neighbors[getOppositeDir(i)] = nil end
+    end
+    if ns.GridMap then ns.GridMap.Refresh() end
 end
 
 function Engine.SetTracking(enabled) tracking_disabled = not enabled end

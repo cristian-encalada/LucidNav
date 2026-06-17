@@ -150,6 +150,13 @@ local function buildToolbar(maze, sf)
         function() if ns.maze.helpDialog then ns.maze.helpDialog:Show() end end
     )
     helpBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
+
+    local undoBtn = makeIconBtn(
+        sf, "interface\\buttons\\ui-rotationleft-button-up", 22,
+        "Undo last action",
+        function() if ns.History then ns.History.Undo() end end
+    )
+    undoBtn:SetPoint("RIGHT", helpBtn, "LEFT", -4, 0)
 end
 
 ------------------------------------------------------------

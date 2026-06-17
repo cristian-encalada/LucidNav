@@ -68,6 +68,7 @@ local function buildJumpDialog(mazeFrame)
     local btnNo = makeDialogButton(dlg, "No, jump over", 110, 22)
     btnNo:SetPoint("BOTTOMRIGHT", dlg, "BOTTOMRIGHT", -14, 14)
     btnNo:SetScript("OnClick", function()
+        if ns.History then ns.History.Snapshot("Jump over") end
         ns.Engine.JumpOver()
         dlg:Hide()
     end)
