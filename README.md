@@ -1,5 +1,5 @@
 ![CurseForge](https://img.shields.io/badge/CurseForge-Download-orange)
-![WoW Version](https://img.shields.io/badge/WoW-12.0.5-blue)
+![WoW Version](https://img.shields.io/badge/WoW-12.0.7-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 # LucidNav – Lucid Nightmare Maze Navigator
@@ -8,7 +8,7 @@
 
 Instead of drawing the maze manually on paper, LucidNav **automatically builds a live map of the labyrinth as you explore** and guides you step-by-step to any destination.
 
-![LucidNav Preview](lucidnav_ui_improved.png)
+![LucidNav Preview](assets/img/lucidnav_ui_improved.png)
 
 ---
 
