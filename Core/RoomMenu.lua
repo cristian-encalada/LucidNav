@@ -43,11 +43,22 @@ local function showModern(room)
             end)
         end
 
+        if room.is_trap then
+            root:CreateButton("Clear trap", function()
+                ns.Engine.ClearTrap(room)
+            end)
+        end
+
         if ns.History and ns.History.HasEntries() then
             root:CreateButton("Undo last action", function()
                 ns.History.Undo()
             end)
         end
+
+        root:CreateDivider()
+        root:CreateButton("Delete room", function()
+            ns.Engine.DeleteRoom(room)
+        end)
     end)
 end
 
@@ -91,10 +102,22 @@ local function showLegacy(room)
         }
     end
 
+    if room.is_trap then
+        menu[#menu+1] = {
+            text = "Clear trap", notCheckable = true,
+            func = function() ns.Engine.ClearTrap(room) end,
+        }
+    end
+
     menu[#menu+1] = {
         text = "Undo last action", notCheckable = true,
         disabled = not (ns.History and ns.History.HasEntries()),
         func = function() if ns.History then ns.History.Undo() end end,
+    }
+
+    menu[#menu+1] = {
+        text = "Delete room", notCheckable = true,
+        func = function() ns.Engine.DeleteRoom(room) end,
     }
 
     EasyMenu(menu, legacyFrame, "cursor", 0, 0, "MENU")

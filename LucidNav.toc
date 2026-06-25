@@ -2,7 +2,7 @@
 ## Title: LucidNav - Lucid Nightmare Maze Navigator
 ## Author: Cristian Encalada (Byob - The Scryers - US)
 ## Notes: Real-time navigator for the Endless Halls maze (Lucid Nightmare secret mount)
-## Version: 1.2.0
+## Version: 1.3.0
 ## IconTexture: Interface\Icons\Ability_Mount_NightmareHorse
 ## X-Category: Achievements
 ## DefaultState: Enabled
@@ -14,6 +14,7 @@
 Core\Constants.lua
 Core\RoomEngine.lua
 Core\History.lua
+Core\Checkpoints.lua
 Core\GridMap.lua
 Core\Dialogs.lua
 Core\RoomMenu.lua

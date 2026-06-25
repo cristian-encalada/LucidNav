@@ -21,6 +21,10 @@ local poi_warned   = 0
 
 local pendingJump  = nil   -- set when jump dialog is open
 
+-- Frame levels so overlapping/abutting cells stay clickable: base cells sit
+-- low, the current room is raised, and the selected room is raised highest.
+local FL_BASE, FL_CURRENT, FL_SELECTED = 2, 5, 8
+
 local Exporting_To_EHH = false
 local EHH_Directions   = ""
 
@@ -74,9 +78,12 @@ end
 local function setSelectedBtn(btn, force)
     if not force and selected_btn == btn then
         ns.maze.selMarker:Hide()
+        -- Drop the de-selected cell back down (current room keeps its level).
+        btn:SetFrameLevel(btn == (current_room and current_room.button) and FL_CURRENT or FL_BASE)
         selected_btn = nil
     else
         selected_btn = btn
+        btn:SetFrameLevel(FL_SELECTED)
         ns.maze.selMarker:ClearAllPoints()
         ns.maze.selMarker:SetPoint("CENTER", btn, "CENTER")
         ns.maze.selMarker:Show()
@@ -183,6 +190,15 @@ local function recolorRoom(r)
         btn.midTex:SetColorTexture(unpack(C.cellColor.visited))
         btn.borderTex:SetColorTexture(unpack(C.cellColor.borderVisited))
     end
+    -- Flag disconnected (orphaned) rooms so they are easy to spot and delete.
+    -- The current room is exempt so a fresh single-room map is not flagged.
+    if not r.is_trap and r ~= current_room then
+        local connected = false
+        for i = 1, 4 do if r.neighbors[i] then connected = true; break end end
+        if not connected then
+            btn.borderTex:SetColorTexture(unpack(C.cellColor.orphanBorder))
+        end
+    end
     for i = 1, 4 do
         btn.walls[i]:SetShown(r.walls[i] == true)
     end
@@ -200,6 +216,7 @@ local function createButton(r)
     local btn = getUnusedButton()
     local x, y = getMapXY(r.cx, r.cy)
     btn:SetPoint("TOPLEFT", ns.container, "TOPLEFT", x, -y)
+    btn:SetFrameLevel(FL_BASE)
     btn.midTex:SetColorTexture(unpack(C.cellColor.default))
     btn.borderTex:SetColorTexture(unpack(C.cellColor.border))
     for i = 1, 4 do btn.walls[i]:Hide() end
@@ -208,6 +225,54 @@ local function createButton(r)
     btn:Show()
     r.button = btn
 end
+
+------------------------------------------------------------
+-- Connector lines: when two linked rooms do not end up in physically
+-- adjacent cells (dead-reckoning drift / spiral displacement), draw a line
+-- between them so the logical link is never invisible.
+------------------------------------------------------------
+local connectorPool   = {}
+local activeConnectors = {}
+
+local function refreshConnectors()
+    if not ns.container then return end
+    for _, line in ipairs(activeConnectors) do
+        line:Hide()
+        connectorPool[#connectorPool + 1] = line
+    end
+    wipe(activeConnectors)
+
+    for _, r in pairs(rooms) do
+        if r.button then
+            for dir = 1, 4 do
+                local n = r.neighbors[dir]
+                -- Draw each pair once (r.index < n.index).
+                if n and n.button and r.index < n.index then
+                    local off = C.coord_offset[dir]
+                    local adjacent = (n.cx == r.cx + off[1]) and (n.cy == r.cy + off[2])
+                    if not adjacent then
+                        local line = tremove(connectorPool)
+                            or ns.container:CreateLine(nil, "ARTWORK", nil, -1)
+                        line:SetThickness(2)
+                        line:SetColorTexture(0.40, 0.75, 1.0, 0.6)
+                        line:SetStartPoint("CENTER", r.button)
+                        line:SetEndPoint("CENTER", n.button)
+                        line:Show()
+                        activeConnectors[#activeConnectors + 1] = line
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Single entry point for redrawing the auxiliary views after any map mutation.
+local function refreshMapViews()
+    refreshConnectors()
+    if ns.GridMap then ns.GridMap.Refresh() end
+end
+
+function Engine.RefreshConnectors() refreshConnectors() end
 
 local function newRoom()
     local r = {}
@@ -230,9 +295,10 @@ local function setCurrentRoom(r)
     current_room = r
 
     for _, v in pairs(rooms) do
-        if v.button then v.button:SetAlpha(0.65) end
+        if v.button then v.button:SetAlpha(0.65); v.button:SetFrameLevel(FL_BASE) end
     end
     r.button:SetAlpha(1)
+    r.button:SetFrameLevel(FL_CURRENT)
     for _, n in pairs(r.neighbors) do
         if n and n.button then n.button:SetAlpha(1) end
     end
@@ -247,21 +313,48 @@ local function setCurrentRoom(r)
     ns.maze.current_room_label:SetText("Current: |cff00ff00" .. r.index .. "|r")
     setSelectedBtn(r.button, true)
 
-    if ns.GridMap then ns.GridMap.Refresh() end
+    refreshMapViews()
 end
 
 ------------------------------------------------------------
 -- Jump / room offset helpers
 ------------------------------------------------------------
-local function getRoomJumpOffset(baseCX, baseCY, dcx, dcy)
-    local oX, oY = dcx, dcy
-    local function isFree()
-        for _, v in pairs(rooms) do
-            if v.cx == baseCX + oX and v.cy == baseCY + oY then return false end
-        end
-        return true
+local function cellIsFree(cx, cy)
+    for _, v in pairs(rooms) do
+        if v.cx == cx and v.cy == cy then return false end
     end
-    while not isFree() do oX = oX + dcx; oY = oY + dcy end
+    return true
+end
+
+-- Find a free cell as close as possible to the ideal cell (one step in the
+-- walked direction). Spiral outward in Chebyshev rings and pick the nearest
+-- free cell, so a displaced room lands near where it belongs instead of
+-- scattering down a single axis. Returns the offset relative to (baseCX,baseCY).
+local function getRoomJumpOffset(baseCX, baseCY, dcx, dcy)
+    local idealX, idealY = baseCX + dcx, baseCY + dcy
+    if cellIsFree(idealX, idealY) then return dcx, dcy end
+
+    for ring = 1, 64 do
+        local bestX, bestY, bestD
+        for ox = -ring, ring do
+            for oy = -ring, ring do
+                if math.max(math.abs(ox), math.abs(oy)) == ring then
+                    local cx, cy = idealX + ox, idealY + oy
+                    if cellIsFree(cx, cy) then
+                        local d = ox * ox + oy * oy
+                        if bestD == nil or d < bestD then
+                            bestD, bestX, bestY = d, cx, cy
+                        end
+                    end
+                end
+            end
+        end
+        if bestX then return bestX - baseCX, bestY - baseCY end
+    end
+
+    -- Fallback: linear slide (should never be reached on a sane-sized map).
+    local oX, oY = dcx, dcy
+    while not cellIsFree(baseCX + oX, baseCY + oY) do oX = oX + dcx; oY = oY + dcy end
     return oX, oY
 end
 
@@ -458,8 +551,8 @@ local function deDuplicateMap(orig, dupe)
         end
     end
 
-    -- 2g. Refresh grid view
-    if ns.GridMap then ns.GridMap.Refresh() end
+    -- 2g. Refresh grid + connector views
+    refreshMapViews()
 end
 
 ------------------------------------------------------------
@@ -678,6 +771,9 @@ function Engine.ImportMap(t)
     end
     Engine.UpdatePOIButtonText()
     Engine.UpdateNavButtonText()
+    -- Keep the Grid Map (and connector lines) in sync for every import path:
+    -- Undo, checkpoint restore, login load, and editbox import.
+    refreshMapViews()
 end
 
 local logoutFrame = CreateFrame("Frame")
@@ -765,7 +861,10 @@ end
 ------------------------------------------------------------
 -- Main OnUpdate
 ------------------------------------------------------------
-local function onUpdate()
+local labelAccum   = 0
+local lastShownX, lastShownY  -- last integer coords pushed to the labels
+
+local function onUpdate(self, elapsed)
     local y, x = UnitPosition("player")
     ns.playerNav.tex:SetRotation(GetPlayerFacing())
 
@@ -779,9 +878,20 @@ local function onUpdate()
     end
     lx = x; ly = y
 
-    if ns.maze.x_label then
-        ns.maze.x_label:SetText("X: |cff00ff00" .. math.floor(x) .. "|r")
-        ns.maze.y_label:SetText("Y: |cff00ff00" .. math.floor(y) .. "|r")
+    -- Throttle coordinate labels to ~10/sec and skip unchanged values, so we
+    -- don't allocate two new strings every frame (the main source of GC churn).
+    labelAccum = labelAccum + (elapsed or 0)
+    if labelAccum >= 0.1 and ns.maze.x_label then
+        labelAccum = 0
+        local fx, fy = math.floor(x), math.floor(y)
+        if fx ~= lastShownX then
+            lastShownX = fx
+            ns.maze.x_label:SetText("X: |cff00ff00" .. fx .. "|r")
+        end
+        if fy ~= lastShownY then
+            lastShownY = fy
+            ns.maze.y_label:SetText("Y: |cff00ff00" .. fy .. "|r")
+        end
     end
 
     -- Right-click pan: read drag state set by scrollframe's OnMouseDown
@@ -912,7 +1022,9 @@ function Engine.UnlinkNeighbor(room, dir)
     local n = room.neighbors[dir]
     room.neighbors[dir] = nil
     if n then n.neighbors[getOppositeDir(dir)] = nil end
-    if ns.GridMap then ns.GridMap.Refresh() end
+    recolorRoom(room)
+    if n then recolorRoom(n) end
+    refreshMapViews()
 end
 
 function Engine.DetachRoom(room)
@@ -920,9 +1032,94 @@ function Engine.DetachRoom(room)
     for i = 1,4 do
         local n = room.neighbors[i]
         room.neighbors[i] = nil
-        if n then n.neighbors[getOppositeDir(i)] = nil end
+        if n then n.neighbors[getOppositeDir(i)] = nil; recolorRoom(n) end
     end
-    if ns.GridMap then ns.GridMap.Refresh() end
+    recolorRoom(room)
+    refreshMapViews()
+end
+
+function Engine.ClearTrap(room)
+    if not room or not room.is_trap then return end
+    if ns.History then ns.History.Snapshot("Clear trap") end
+    room.is_trap = false
+    if trapRoom == room then trapRoom = nil end
+    recolorRoom(room)
+    Engine.UpdateNavButtonText()
+    refreshMapViews()
+end
+
+function Engine.DeleteRoom(room)
+    if not room then return end
+    -- Room 1 is the maze entrance: it anchors the Grid Map layout and the
+    -- respawn-to-entrance logic, so it must never be deleted.
+    if room == rooms[1] then
+        print("|cff00ff00LucidNav:|r Cannot delete the entrance room (Room 1).")
+        return
+    end
+    local total = 0
+    for _ in pairs(rooms) do total = total + 1 end
+    if total <= 1 then
+        print("|cff00ff00LucidNav:|r Cannot delete the only room on the map.")
+        return
+    end
+    if ns.History then ns.History.Snapshot("Delete room") end
+
+    -- Pick a replacement current room (prefer a neighbor) before severing links.
+    local replacement
+    if current_room == room then
+        for i = 1, 4 do
+            if room.neighbors[i] then replacement = room.neighbors[i]; break end
+        end
+        if not replacement then
+            for _, v in pairs(rooms) do
+                if v ~= room then replacement = v; break end
+            end
+        end
+    end
+
+    -- Sever neighbor back-links and recolor former neighbors (may now be orphans).
+    for i = 1, 4 do
+        local n = room.neighbors[i]
+        if n then n.neighbors[getOppositeDir(i)] = nil end
+        room.neighbors[i] = nil
+        if n then recolorRoom(n) end
+    end
+
+    -- Clear POI / trap registries.
+    if room.poi_index and poirooms[room.poi_index] == room then
+        poirooms[room.poi_index] = nil
+    end
+    if trapRoom == room then trapRoom = nil end
+
+    -- Clear selection if it pointed here.
+    if selected_btn and selected_btn.room == room then
+        selected_btn = nil
+        if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
+        if ns.maze and ns.maze.selected_room_label then
+            ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+        end
+    end
+
+    -- Recycle the button and drop the room from the map.
+    if room.button then
+        room.button:Hide()
+        room.button.room = nil
+        pool[#pool + 1] = room.button
+        room.button = nil
+    end
+    rooms[room.index] = nil
+
+    -- Re-point the current room if we just deleted it.
+    if replacement then
+        setCurrentRoom(replacement)
+        recolorRoom(replacement)  -- refresh orphan-flag now that it is current
+    elseif current_room == room then
+        current_room = nil
+    end
+
+    Engine.UpdatePOIButtonText()
+    Engine.UpdateNavButtonText()
+    refreshMapViews()
 end
 
 function Engine.SetTracking(enabled) tracking_disabled = not enabled end

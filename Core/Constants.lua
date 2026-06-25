@@ -59,6 +59,7 @@ ns.C = {
         borderVisited = {0.20, 0.20, 0.20, 1},
         trap          = {1.00, 0.50, 0.00, 1},
         trapBorder    = {0.75, 0.30, 0.00, 1},
+        orphanBorder  = {0.80, 0.10, 0.10, 1},
     },
     -- Old save format container size (for backward-compat conversion)
     oldContainerW = 50000,

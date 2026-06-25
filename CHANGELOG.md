@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.3.0] - 2026-06-25
+
+### Added
+- **Delete room** — right-click any room → *Delete room* to remove it (with its
+  POI/trap and all links). Orphaned rooms left by *Unlink* / *Detach* can now be
+  cleaned up instead of cluttering the map and triggering phantom merge prompts.
+- **Disconnected-room indicator** — rooms with no remaining links are drawn with
+  a red border so orphans are easy to spot.
+- **Clear trap** — right-click a teleport-trap room → *Clear trap* to un-mark a
+  mis-flagged trap room.
+- **Map checkpoints** — *Save* / *Restore* buttons (and `/ln save <name>`,
+  `/ln restore <name>`, `/ln checkpoints`) persist named map snapshots to
+  SavedVariables. They survive `/reload` — an in-game replacement for
+  screenshotting the map at each milestone. New module `Core/Checkpoints.lua`.
+
+### Fixed
+- **Undo now refreshes the Grid Map.** The 8×8 Grid Map (and connector lines)
+  used to keep showing the stale "re-drawn" state after an Undo because the
+  import path never refreshed it; `Engine.ImportMap` now refreshes all auxiliary
+  views, so Undo, checkpoint restore, and login load all stay in sync.
+
+### Changed
+- **Cleaner map layout.** New rooms that can't sit in their ideal cell now use a
+  nearest-free-cell spiral search instead of sliding down one axis, so the map
+  no longer scatters. Linked rooms that don't end up physically adjacent are now
+  joined by a connector line so a link is never invisible.
+- **Overlapping cells stay clickable.** The current and selected rooms are raised
+  above their neighbors so abutting/overlapping cells can still be clicked.
+- **Lower memory usage.** The per-frame `OnUpdate` no longer rebuilds the X/Y
+  coordinate label strings every frame; updates are throttled to ~10/sec and
+  skipped when the value is unchanged, removing the addon's main source of
+  garbage-collection churn.
+
+---
+
 ## [1.2.0] - 2026-06-16
 
 ### Added

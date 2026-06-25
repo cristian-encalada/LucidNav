@@ -368,6 +368,39 @@ local function buildBottomBar(maze)
     end)
     btnNew:SetPoint("LEFT", btnGrid, "RIGHT", 4, 0)
 
+    -- Persistent checkpoints (survive /reload; the in-game replacement for
+    -- screenshotting the map at each milestone).
+    local btnSave = makeBtn("Save", 60, function()
+        if ns.Checkpoints then ns.Checkpoints.Save() end
+    end)
+    btnSave:SetPoint("LEFT", btnNew, "RIGHT", 4, 0)
+
+    local btnRestore = makeBtn("Restore", 70, function()
+        if not ns.Checkpoints then return end
+        local list = ns.Checkpoints.List()
+        if #list == 0 then
+            print("|cff00ff00LucidNav:|r No checkpoints saved yet. Click Save first.")
+            return
+        end
+        if MenuUtil and MenuUtil.CreateContextMenu then
+            MenuUtil.CreateContextMenu(UIParent, function(owner, root)
+                root:CreateTitle("Checkpoints")
+                for _, cp in ipairs(list) do
+                    local name = cp.name
+                    -- Each checkpoint is a submenu with explicit actions, so the
+                    -- top-level entry never ambiguously "restores on click".
+                    local sub = root:CreateButton(name .. "  (" .. (cp.saved or "") .. ")")
+                    sub:CreateButton("Restore", function() ns.Checkpoints.Restore(name) end)
+                    sub:CreateButton("Delete",  function() ns.Checkpoints.Delete(name) end)
+                end
+            end)
+        else
+            -- No modern menu API: restore the most recent checkpoint.
+            ns.Checkpoints.Restore(list[1].name)
+        end
+    end)
+    btnRestore:SetPoint("LEFT", btnSave, "RIGHT", 4, 0)
+
     local btnClose = CreateFrame("Button", nil, maze, "UIPanelButtonTemplate")
     btnClose:SetSize(60, 20)
     btnClose:SetText(CLOSE)
