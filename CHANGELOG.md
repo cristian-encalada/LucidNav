@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.4.0] - 2026-06-25
+
+### Changed
+- **Paper-style map.** Blocked walls are now drawn as lines along the cell edges
+  (open sides are gaps), replacing the old X / mute icon — both on the main map
+  canvas and the 8×8 Grid Map. Cells sit closer together so the map reads like a
+  hand-drawn maze.
+- **Overlapping / non-intersecting-cross rooms use dashed lines** to set them
+  apart from normal rooms (rooms sharing a maze cell or the same canvas position).
+- The teleport-trap room is now marked with the **skull icon** in the 8×8 Grid
+  Map (matching the main canvas), replacing the old "T" label.
+
+### Added
+- **Grid Map wrap markers.** The 8×8 Grid Map now shows the maze's edge wrap
+  (opposite side with a fixed +4-cell offset): directional arrows on each edge
+  plus offset labels on the right (wrapped row) and bottom (wrapped column).
+
+---
+
 ## [1.3.0] - 2026-06-25
 
 ### Added

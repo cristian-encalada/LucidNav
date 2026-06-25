@@ -59,8 +59,8 @@ end
 -- Camera
 ------------------------------------------------------------
 local function centerCam(cx, cy)
-    local x = C.containerW / 2 + (C.buttonW + 6) * cx
-    local y = C.containerH / 2 + (C.buttonH + 6) * cy
+    local x = C.containerW / 2 + C.cellStep * cx
+    local y = C.containerH / 2 + C.cellStep * cy
     ns.scrollframe:SetHorizontalScroll(x - 250 + C.buttonW / 2)
     ns.scrollframe:SetVerticalScroll(y - 250 + C.buttonH / 2)
 end
@@ -105,7 +105,7 @@ local function createCell()
     btn.borderTex = borderTex
 
     local midTex = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
-    midTex:SetSize(C.buttonW - C.borderW * 2 - 1, C.buttonH - C.borderH * 2 - 1)
+    midTex:SetSize(C.buttonW - 8, C.buttonH - 8)
     midTex:SetColorTexture(unpack(C.cellColor.default))
     midTex:SetPoint("CENTER")
     btn.midTex = midTex
@@ -121,18 +121,44 @@ local function createCell()
     skull:Hide()
     btn.skullTex = skull
 
+    -- Paper-style walls: each blocked edge is drawn as a line spanning the cell
+    -- side. Each edge holds one full-length solid bar plus a set of short dash
+    -- segments (shown for overlapped / cross rooms). Anchors are static; only
+    -- visibility toggles per render (see renderRoomWalls).
     btn.walls = {}
-    for i = 1, 4 do
-        local w = btn:CreateTexture(nil, "OVERLAY")
-        w:SetTexture("interface\\common\\voicechat-muted")
-        w:SetSize(C.blockW, C.blockH)
-        w:Hide()
-        btn.walls[i] = w
+    local bw, bh, th = C.buttonW, C.buttonH, C.wallThickness
+    local nseg, gap = C.dashSegments, C.dashGap
+    for dir = 1, 4 do
+        local horizontal = (dir == C.north or dir == C.south)
+        local len    = horizontal and bw or bh
+        local segLen = (len - (nseg - 1) * gap) / nseg
+        local edge   = { dashes = {} }
+
+        local s = btn:CreateTexture(nil, "OVERLAY")
+        s:SetColorTexture(unpack(C.wallColor))
+        s:Hide()
+        edge.solid = s
+        if     dir == C.north then s:SetSize(bw, th); s:SetPoint("TOPLEFT",     btn, "TOPLEFT",     0, 0)
+        elseif dir == C.south then s:SetSize(bw, th); s:SetPoint("BOTTOMLEFT",  btn, "BOTTOMLEFT",  0, 0)
+        elseif dir == C.east  then s:SetSize(th, bh); s:SetPoint("TOPRIGHT",    btn, "TOPRIGHT",    0, 0)
+        else                       s:SetSize(th, bh); s:SetPoint("TOPLEFT",     btn, "TOPLEFT",     0, 0)
+        end
+
+        for k = 1, nseg do
+            local d = btn:CreateTexture(nil, "OVERLAY")
+            d:SetColorTexture(unpack(C.wallColor))
+            d:Hide()
+            local off = (k - 1) * (segLen + gap)
+            if horizontal then d:SetSize(segLen, th) else d:SetSize(th, segLen) end
+            if     dir == C.north then d:SetPoint("TOPLEFT",    btn, "TOPLEFT",    off,  0)
+            elseif dir == C.south then d:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", off,  0)
+            elseif dir == C.east  then d:SetPoint("TOPRIGHT",   btn, "TOPRIGHT",   0,   -off)
+            else                       d:SetPoint("TOPLEFT",    btn, "TOPLEFT",    0,   -off)
+            end
+            edge.dashes[k] = d
+        end
+        btn.walls[dir] = edge
     end
-    btn.walls[C.north]:SetPoint("CENTER", btn, "TOP",    0,          -C.wallInset)
-    btn.walls[C.east]:SetPoint( "CENTER", btn, "RIGHT",  -C.wallInset, 0)
-    btn.walls[C.south]:SetPoint("CENTER", btn, "BOTTOM", 0,           C.wallInset)
-    btn.walls[C.west]:SetPoint( "CENTER", btn, "LEFT",   C.wallInset,  0)
 
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     btn:SetScript("OnClick", function(self, button, isDown)
@@ -170,6 +196,26 @@ local function setRoomNumber(r)
     r.button.text:SetText("|cffeeeeee" .. r.index .. "|r")
 end
 
+-- Draw each blocked edge as a paper-style line: solid for a normal room,
+-- dashed for an overlapped / non-intersecting-cross room (r.isOverlap).
+local function renderRoomWalls(r)
+    if not r.button then return end
+    local edges = r.button.walls
+    for dir = 1, 4 do
+        local e = edges[dir]
+        if not r.walls[dir] then
+            e.solid:Hide()
+            for k = 1, #e.dashes do e.dashes[k]:Hide() end
+        elseif r.isOverlap then
+            e.solid:Hide()
+            for k = 1, #e.dashes do e.dashes[k]:Show() end
+        else
+            e.solid:Show()
+            for k = 1, #e.dashes do e.dashes[k]:Hide() end
+        end
+    end
+end
+
 local function recolorRoom(r)
     if not r.button then return end
     local btn = r.button
@@ -199,17 +245,15 @@ local function recolorRoom(r)
             btn.borderTex:SetColorTexture(unpack(C.cellColor.orphanBorder))
         end
     end
-    for i = 1, 4 do
-        btn.walls[i]:SetShown(r.walls[i] == true)
-    end
+    renderRoomWalls(r)
 end
 
 ------------------------------------------------------------
 -- Room placement helpers
 ------------------------------------------------------------
 local function getMapXY(cx, cy)
-    return C.containerW / 2 + (C.buttonW + 6) * cx,
-           C.containerH / 2 + (C.buttonH + 6) * cy
+    return C.containerW / 2 + C.cellStep * cx,
+           C.containerH / 2 + C.cellStep * cy
 end
 
 local function createButton(r)
@@ -219,7 +263,11 @@ local function createButton(r)
     btn:SetFrameLevel(FL_BASE)
     btn.midTex:SetColorTexture(unpack(C.cellColor.default))
     btn.borderTex:SetColorTexture(unpack(C.cellColor.border))
-    for i = 1, 4 do btn.walls[i]:Hide() end
+    for i = 1, 4 do
+        local e = btn.walls[i]
+        e.solid:Hide()
+        for k = 1, #e.dashes do e.dashes[k]:Hide() end
+    end
     btn.room = r
     btn:EnableMouse(true)
     btn:Show()
@@ -266,8 +314,30 @@ local function refreshConnectors()
     end
 end
 
+-- Mark rooms that share a maze cell (non-intersecting cross, via gcol/grow) or a
+-- canvas position (overlapping button, via cx/cy) so their walls render dashed.
+local function computeOverlapFlags()
+    local byGrid, byPos = {}, {}
+    for _, r in pairs(rooms) do
+        r.isOverlap = false
+        if r.gcol and r.grow then
+            local k = r.gcol .. "," .. r.grow
+            if byGrid[k] then byGrid[k].isOverlap = true; r.isOverlap = true
+            else byGrid[k] = r end
+        end
+        local pk = r.cx .. "," .. r.cy
+        if byPos[pk] then byPos[pk].isOverlap = true; r.isOverlap = true
+        else byPos[pk] = r end
+    end
+end
+
 -- Single entry point for redrawing the auxiliary views after any map mutation.
 local function refreshMapViews()
+    -- Refresh wrap-aware grid positions so cross detection works even when the
+    -- Grid Map window is closed, then re-render walls (solid vs dashed).
+    if ns.GridMap and ns.GridMap.ComputePositions then ns.GridMap.ComputePositions() end
+    computeOverlapFlags()
+    for _, r in pairs(rooms) do renderRoomWalls(r) end
     refreshConnectors()
     if ns.GridMap then ns.GridMap.Refresh() end
 end

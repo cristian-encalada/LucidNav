@@ -9,6 +9,14 @@ ns.C = {
     -- Cell size
     buttonW = 35,
     buttonH = 35,
+    -- Canvas spacing between cell origins (paper-style: tight gap so adjacent
+    -- open rooms read as connected and shared walls align).
+    cellStep = 36,  -- buttonW + 1
+    -- Wall line rendering (paper-style edges, replacing the old X/mute icon)
+    wallColor     = {0.95, 0.95, 0.95, 1},
+    wallThickness = 3,
+    dashSegments  = 4,   -- short bars used to draw a dashed (overlapped) edge
+    dashGap       = 3,   -- px gap between dash segments
     -- Edge hit-zone widths (for click detection)
     borderW = bW,
     borderH = bH,

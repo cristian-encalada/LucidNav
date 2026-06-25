@@ -109,9 +109,13 @@ local function refreshGridMap()
         for row = 1, 8 do
             local cell = gridCells[col][row]
             cell.label:SetText("")
+            cell.skull:Hide()
             cell:SetBackdropColor(0.1, 0.1, 0.1, 1)
             cell:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
-            for d = 1, 4 do cell.conn[d]:Hide() end
+            for d = 1, 4 do
+                cell.wall[d]:Hide()
+                for k = 1, #cell.wallDash[d] do cell.wallDash[d][k]:Hide() end
+            end
         end
     end
 
@@ -149,7 +153,8 @@ local function refreshGridMap()
                 end
 
                 if hasTrap then
-                    cell.label:SetText("T")
+                    cell.skull:Show()
+                    cell.label:SetText("")
                 elseif isCross then
                     if bestPoiC ~= nil then
                         cell.label:SetText(labelParts[1] .. "+")
@@ -161,10 +166,19 @@ local function refreshGridMap()
                     cell.label:SetText(labelParts[1] or "")
                 end
 
-                for _, r in ipairs(rList) do
-                    for dir = 1, 4 do
-                        if not r.walls[dir] and r.neighbors[dir] ~= nil then
-                            cell.conn[dir]:Show()
+                -- Wall lines: an edge is walled if every room in the cell is
+                -- walled there (any occupying room's passage opens the side).
+                -- Cross cells draw dashed walls to match the canvas convention.
+                for dir = 1, 4 do
+                    local walled = true
+                    for _, r in ipairs(rList) do
+                        if not r.walls[dir] then walled = false; break end
+                    end
+                    if walled then
+                        if isCross then
+                            for k = 1, #cell.wallDash[dir] do cell.wallDash[dir][k]:Show() end
+                        else
+                            cell.wall[dir]:Show()
                         end
                     end
                 end
@@ -181,9 +195,12 @@ local function refreshGridMap()
     gridFrame:Show()
 end
 
+local GRID_RM = 22  -- right margin for wrap offset labels
+local GRID_BM = 22  -- bottom margin for wrap offset labels
+
 local function createGridMap()
-    local frameW = GCOFF_X + 8*GCELL + 7*GCPAD + 10
-    local frameH = GCOFF_Y + 8*GCELL + 7*GCPAD + 10
+    local frameW = GCOFF_X + 8*GCELL + 7*GCPAD + GRID_RM
+    local frameH = GCOFF_Y + 8*GCELL + 7*GCPAD + GRID_BM
 
     gridFrame = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate")
     gridFrame:SetSize(frameW, frameH)
@@ -232,23 +249,83 @@ local function createGridMap()
             cell.label:SetPoint("CENTER")
             cell.label:SetTextColor(0.88,0.88,0.88,1)
 
-            local cs = math.floor(GCELL/3)
-            cell.conn = {}
+            cell.skull = cell:CreateTexture(nil,"OVERLAY")
+            cell.skull:SetTexture("interface\\targetingframe\\UI-RaidTargetingIcon_8")
+            cell.skull:SetSize(GCELL-12, GCELL-12)
+            cell.skull:SetPoint("CENTER")
+            cell.skull:Hide()
 
-            local function makeConnTex(anchor, w, h)
-                local c = cell:CreateTexture(nil,"OVERLAY")
-                c:SetSize(w,h); c:SetPoint(anchor,cell,anchor,0,0)
-                c:SetColorTexture(0.75,0.75,0.75,1); c:Hide()
-                return c
+            -- Paper-style wall lines per edge: one full-edge solid bar plus a
+            -- set of dash segments (shown for non-intersecting-cross cells).
+            cell.wall     = {}
+            cell.wallDash = {}
+            local gth, gn, ggap = 2, 3, 3
+            for dir = 1, 4 do
+                local horizontal = (dir == C.north or dir == C.south)
+                local segLen = (GCELL - (gn - 1) * ggap) / gn
+
+                local s = cell:CreateTexture(nil, "OVERLAY")
+                s:SetColorTexture(unpack(C.wallColor)); s:Hide()
+                if     dir == C.north then s:SetSize(GCELL, gth); s:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0, 0)
+                elseif dir == C.south then s:SetSize(GCELL, gth); s:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", 0, 0)
+                elseif dir == C.east  then s:SetSize(gth, GCELL); s:SetPoint("TOPRIGHT",   cell, "TOPRIGHT",   0, 0)
+                else                       s:SetSize(gth, GCELL); s:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0, 0)
+                end
+                cell.wall[dir] = s
+
+                local dts = {}
+                for k = 1, gn do
+                    local d = cell:CreateTexture(nil, "OVERLAY")
+                    d:SetColorTexture(unpack(C.wallColor)); d:Hide()
+                    local off = (k - 1) * (segLen + ggap)
+                    if horizontal then d:SetSize(segLen, gth) else d:SetSize(gth, segLen) end
+                    if     dir == C.north then d:SetPoint("TOPLEFT",    cell, "TOPLEFT",    off,  0)
+                    elseif dir == C.south then d:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", off,  0)
+                    elseif dir == C.east  then d:SetPoint("TOPRIGHT",   cell, "TOPRIGHT",   0,   -off)
+                    else                       d:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0,   -off)
+                    end
+                    dts[k] = d
+                end
+                cell.wallDash[dir] = dts
             end
-            cell.conn[C.north] = makeConnTex("TOP",    cs, 4)
-            cell.conn[C.south] = makeConnTex("BOTTOM", cs, 4)
-            cell.conn[C.east]  = makeConnTex("RIGHT",  4, cs)
-            cell.conn[C.west]  = makeConnTex("LEFT",   4, cs)
 
             gridCells[col][row] = cell
         end
     end
+
+    ------------------------------------------------------------
+    -- Wrap / skip markers: the maze wraps to the opposite edge with a fixed
+    -- +4-cell offset (flipSidesGrid). Show that with offset labels on the right
+    -- (wrapped row) and bottom (wrapped column), plus a direction arrow per edge.
+    ------------------------------------------------------------
+    local function mkMarker(x, y, text, r, g, b)
+        local t = gridFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        t:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x, -y)
+        t:SetText(text); t:SetTextColor(r, g, b, 1)
+        return t
+    end
+
+    local span  = 8*(GCELL+GCPAD)
+    local midX  = GCOFF_X + 4*(GCELL+GCPAD) - 4
+    local midY  = GCOFF_Y + 4*(GCELL+GCPAD) - 6
+
+    for row = 1, 8 do
+        mkMarker(GCOFF_X + span + 4,
+                 GCOFF_Y + (row-1)*(GCELL+GCPAD) + GCELL/2 - 6,
+                 rowLabels[flipSidesGrid(row)], 0.55, 0.45, 0.30)
+    end
+    for col = 1, 8 do
+        mkMarker(GCOFF_X + (col-1)*(GCELL+GCPAD) + GCELL/2 - 4,
+                 GCOFF_Y + span + 4,
+                 tostring(flipSidesGrid(col)), 0.55, 0.45, 0.30)
+    end
+
+    -- ASCII arrows (guaranteed to render in the default WoW font) indicating
+    -- that each edge wraps to the opposite side.
+    mkMarker(midX, 0,                  "v", 0.95, 0.70, 0.25)  -- top edge
+    mkMarker(midX, GCOFF_Y + span + 2, "^", 0.95, 0.70, 0.25)  -- bottom edge
+    mkMarker(2,    midY,               "<", 0.95, 0.70, 0.25)  -- left edge
+    mkMarker(GCOFF_X + span + 7, midY, ">", 0.95, 0.70, 0.25)  -- right edge
 
     local closeBtn = CreateFrame("Button", nil, gridFrame, "UIPanelCloseButton")
     closeBtn:SetSize(18,18)
@@ -261,6 +338,12 @@ end
 ------------------------------------------------------------
 function GridMap.Initialize()
     createGridMap()
+end
+
+-- Recompute wrap-aware grid positions (r.gcol/r.grow) without requiring the
+-- Grid Map window to be open. Used by RoomEngine for cross detection.
+function GridMap.ComputePositions()
+    computeGridPositions()
 end
 
 function GridMap.Show()
