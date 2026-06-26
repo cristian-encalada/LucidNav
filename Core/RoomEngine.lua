@@ -857,15 +857,29 @@ function Engine.ImportMap(t)
     refreshMapViews()
 end
 
+-- Whether this session began with a genuine character login (not a /reload).
+-- A real login respawns the player at the maze entrance (room 1); a /reload
+-- leaves the player exactly where they were, so the current room must be kept.
+local sessionIsFreshLogin = false
+
 local logoutFrame = CreateFrame("Frame")
 logoutFrame:RegisterEvent("PLAYER_LOGOUT")
-logoutFrame:SetScript("OnEvent", function(self, event)
+logoutFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+logoutFrame:SetScript("OnEvent", function(self, event, isInitialLogin, isReloadingUi)
+    if event == "PLAYER_ENTERING_WORLD" then
+        -- Only the first fire after load reflects how the session started.
+        sessionIsFreshLogin = isInitialLogin and true or false
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        return
+    end
     if event ~= "PLAYER_LOGOUT" then return end
     if rooms == nil then return end
     if LucidNavDB == nil then LucidNavDB = {} end
     LucidNavDB.mapData   = Engine.SerializeMap()
     LucidNavDB.last_saved = os.date("%Y-%m-%d %H:%M")
 end)
+
+function Engine.IsFreshLogin() return sessionIsFreshLogin end
 
 ------------------------------------------------------------
 -- EHH export
@@ -1006,7 +1020,13 @@ function Engine.LoadSavedMap()
         local saved = LucidNavDB.last_saved or "unknown time"
         print("|cff00ff00LucidNav:|r Found a saved map from " .. saved .. ". Loading it...")
         Engine.ImportMap(LucidNavDB.mapData)
-        if rooms[1] then last_dir = C.north; setCurrentRoom(rooms[1]) end
+        -- ImportMap already restored the saved current room (matches the player's
+        -- physical position after a /reload). Only snap to the entrance on an
+        -- actual login, when the game has respawned the player at room 1.
+        local validCurrent = current_room and rooms[current_room.index] == current_room
+        if (sessionIsFreshLogin or not validCurrent) and rooms[1] then
+            last_dir = C.north; setCurrentRoom(rooms[1])
+        end
     else
         resetMap()
         print("No saved map found. Starting fresh.")
