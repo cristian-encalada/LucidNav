@@ -208,12 +208,9 @@ local function ensureProfiler()
                 p(string.format("    %s = %d (last %.0fs)", k, v, accum))
                 counters[k] = 0
             end
-            -- compact audit heads-up (full detail printed when you stop debug)
-            local mi = (ns.Engine and ns.Engine.AuditMap) and #ns.Engine.AuditMap() or 0
-            local wm = (ns.GridMap and ns.GridMap.AuditWrap) and #ns.GridMap.AuditWrap() or 0
-            if mi > 0 or wm > 0 then
-                p(string.format("    audit: map=%d issue(s), wrap=%d mismatch(es) — /ln debug off for detail", mi, wm))
-            end
+            -- NOTE: audits are intentionally NOT run here. They allocate tables
+            -- every call and would dominate the idle memory delta we're trying to
+            -- measure. Full audit detail prints on /ln debug off instead.
             accum, frames = 0, 0
         end
     end)
