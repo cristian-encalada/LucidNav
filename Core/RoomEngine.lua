@@ -331,6 +331,25 @@ local function computeOverlapFlags()
     end
 end
 
+-- Make shared-edge walls symmetric. Dedup grafts can join two rooms that each
+-- recorded a different wall state on the now-shared edge; since a dedup links
+-- rooms via an actually-walked path, resolve any mismatch toward OPEN. Edges
+-- that already agree (both walled / both open) are left untouched.
+local function reconcileWalls()
+    for _, r in pairs(rooms) do
+        for d = 1, 4 do
+            local n = r.neighbors[d]
+            if n then
+                local od = getOppositeDir(d)
+                if r.walls[d] ~= n.walls[od] then
+                    r.walls[d] = false
+                    n.walls[od] = false
+                end
+            end
+        end
+    end
+end
+
 -- Single entry point for redrawing the auxiliary views after any map mutation.
 local function refreshMapViews()
     if ns.Debug then ns.Debug.Count("refreshMapViews") end
@@ -631,7 +650,9 @@ local function deDuplicateMap(orig, dupe)
         end
     end
 
-    -- 2g. Refresh grid + connector views
+    -- 2g. Make shared-edge walls symmetric (grafts can leave them mismatched),
+    -- then refresh grid + connector views.
+    reconcileWalls()
     refreshMapViews()
 end
 
@@ -1052,9 +1073,18 @@ end
 
 function Engine.ToggleWall(btn, dir)
     local r = btn.room
-    r.walls[dir] = not r.walls[dir]
+    local v = not r.walls[dir]
+    r.walls[dir] = v
     recolorRoom(r)
+    -- A wall between two known rooms is one physical edge, so keep both sides in
+    -- sync. (Boundary walls toward unexplored space have no neighbor to mirror.)
+    local n = r.neighbors[dir]
+    if n then
+        n.walls[getOppositeDir(dir)] = v
+        recolorRoom(n)
+    end
     if ns.Debug then ns.Debug.Stat("wallToggles") end
+    refreshMapViews()
 end
 
 function Engine.SetPOI(self)
