@@ -1084,7 +1084,10 @@ function Engine.ToggleWall(btn, dir)
         recolorRoom(n)
     end
     if ns.Debug then ns.Debug.Stat("wallToggles") end
-    refreshMapViews()
+    -- A wall toggle changes no room positions, so skip the BFS/connector rebuild
+    -- in refreshMapViews; just re-render the grid's wall lines (recolorRoom above
+    -- already updated the canvas). Pass skipCompute so no grid BFS runs either.
+    if ns.GridMap then ns.GridMap.Refresh(true) end
 end
 
 function Engine.SetPOI(self)
