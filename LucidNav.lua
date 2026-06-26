@@ -12,7 +12,11 @@ SlashCmdList["LucidNav"] = function(msg)
     msg = msg or ""
     local arg, rest = msg:match("^%s*(%S*)%s*(.-)%s*$")
     arg = (arg or ""):lower()
-    if arg == "undo" then
+    if arg == "debug" then
+        -- Single debug switch: toggles live logging + periodic reporting, and
+        -- prints a full summary (memory, stats, map audit, wrap audit) on stop.
+        if ns.Debug then ns.Debug.Toggle() end
+    elseif arg == "undo" then
         if ns.History then ns.History.Undo() end
     elseif arg == "save" then
         if ns.Checkpoints then ns.Checkpoints.Save(rest) end

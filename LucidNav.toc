@@ -12,6 +12,7 @@
 ## X-Credits: Based on LucidNightmareNavigator by Debuggernaut
 
 Core\Constants.lua
+Core\Debug.lua
 Core\RoomEngine.lua
 Core\History.lua
 Core\Checkpoints.lua

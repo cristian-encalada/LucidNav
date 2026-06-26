@@ -301,8 +301,8 @@ local function refreshConnectors()
                     if not adjacent then
                         local line = tremove(connectorPool)
                             or ns.container:CreateLine(nil, "ARTWORK", nil, -1)
-                        line:SetThickness(2)
-                        line:SetColorTexture(0.40, 0.75, 1.0, 0.6)
+                        line:SetThickness(1.5)
+                        line:SetColorTexture(0.40, 0.75, 1.0, 0.35)
                         line:SetStartPoint("CENTER", r.button)
                         line:SetEndPoint("CENTER", n.button)
                         line:Show()
@@ -333,13 +333,15 @@ end
 
 -- Single entry point for redrawing the auxiliary views after any map mutation.
 local function refreshMapViews()
+    if ns.Debug then ns.Debug.Count("refreshMapViews") end
     -- Refresh wrap-aware grid positions so cross detection works even when the
     -- Grid Map window is closed, then re-render walls (solid vs dashed).
     if ns.GridMap and ns.GridMap.ComputePositions then ns.GridMap.ComputePositions() end
     computeOverlapFlags()
     for _, r in pairs(rooms) do renderRoomWalls(r) end
     refreshConnectors()
-    if ns.GridMap then ns.GridMap.Refresh() end
+    -- Positions were just computed above; tell the grid not to BFS a second time.
+    if ns.GridMap then ns.GridMap.Refresh(true) end
 end
 
 function Engine.RefreshConnectors() refreshConnectors() end
@@ -458,6 +460,7 @@ local function addRoom(dir, forceJump)
     current_room.neighbors[dir]      = r
     createButton(r)
     setRoomNumber(r)
+    if ns.Debug then ns.Debug.Stat("roomsDiscovered") end
     return r
 end
 
@@ -510,6 +513,7 @@ local function deDuplicateMap(orig, dupe)
     if orig == dupe then return end
     if (orig and orig.is_trap) or (dupe and dupe.is_trap) then
         print("Skipping map deduplication: one of the rooms is the teleport trap room.")
+        if ns.Debug then ns.Debug.Stat("dedupSkippedTrap") end
         return
     end
     if ns.History then ns.History.Snapshot("Dedup") end
@@ -595,15 +599,21 @@ local function deDuplicateMap(orig, dupe)
     end
 
     -- 2d. Remove dupes from the map
+    local removed = 0
     for dcur in pairs(dupeMap) do
         wipe(dcur.neighbors); wipe(dcur.walls)
         rooms[dcur.index] = nil
+        removed = removed + 1
         if dcur.button then
             dcur.button:Hide()
             dcur.button.room = nil
             pool[#pool+1] = dcur.button
             dcur.button = nil
         end
+    end
+    if ns.Debug then
+        ns.Debug.Stat("dedups")
+        ns.Debug.Stat("dedupRoomsRemoved", removed)
     end
 
     -- 2e. Reassign current_room if it was a dupe
@@ -708,6 +718,7 @@ local function navigateToTarget(targetRoom, startingRoom)
         end
     end
     print("No route from current room to target found, keep wandering until you hit a known POI so you can reattach to the rest of the map")
+    if ns.Debug then ns.Debug.Stat("navNoRoute") end
 end
 
 local function navigateToUnexplored()
@@ -904,7 +915,9 @@ local function setPOIClick(self)
         print("WOAH WOAH WOAH, this point of interest was already defined as room " ..
               poirooms[self.poi_index].index ..
               "! Click again to confirm a loop in the map and de-duplicate nodes")
-        poi_warned = self.poi_index; return
+        poi_warned = self.poi_index
+        if ns.Debug then ns.Debug.Stat("poiConflicts") end
+        return
     end
     poi_warned = 0
 
@@ -917,6 +930,7 @@ local function setPOIClick(self)
         target.POI_t     = self.t
         target.POI_c     = self.c
         recolorRoom(target)
+        if ns.Debug then ns.Debug.Stat("poisSet") end
     end
 
     local found = 0
@@ -1003,8 +1017,12 @@ end
 function Engine.ResetMap()
     -- Snapshot the pre-wipe map so a full reset stays undoable.
     if ns.History then ns.History.Snapshot("Reset") end
-    LucidNavDB = {}
+    -- Wipe saved map data but preserve the debug preference across a New Map.
+    local keepDebug = LucidNavDB and LucidNavDB.debug
+    LucidNavDB = { debug = keepDebug }
     resetMap()
+    -- Fresh map => fresh session stats so counts reflect only the new run.
+    if ns.Debug then ns.Debug.ResetStats() end
     print("Map cleared. Starting fresh.")
 end
 
@@ -1016,6 +1034,7 @@ function Engine.ToggleWall(btn, dir)
     local r = btn.room
     r.walls[dir] = not r.walls[dir]
     recolorRoom(r)
+    if ns.Debug then ns.Debug.Stat("wallToggles") end
 end
 
 function Engine.SetPOI(self)
@@ -1048,6 +1067,7 @@ function Engine.HitTheTrap()
         print("Cannot process trap: no movement recorded yet. Walk somewhere first."); return
     end
     if ns.History then ns.History.Snapshot("Trap") end
+    if ns.Debug then ns.Debug.Stat("trapsMarked") end
     local prevRoom = current_room.neighbors[getOppositeDir(last_dir)]
     if prevRoom then
         current_room.is_trap = true; trapRoom = current_room
@@ -1133,6 +1153,7 @@ function Engine.DeleteRoom(room)
         return
     end
     if ns.History then ns.History.Snapshot("Delete room") end
+    if ns.Debug then ns.Debug.Stat("roomsDeleted") end
 
     -- Pick a replacement current room (prefer a neighbor) before severing links.
     local replacement
@@ -1204,11 +1225,13 @@ function Engine.JumpOver()
     pendingJump.existing.neighbors[getOppositeDir(dir)] = nil
     current_room = pendingJump.prev
     pendingJump  = nil
+    if ns.Debug then ns.Debug.Stat("jumps") end
     setCurrentRoom(addRoom(dir, true))
 end
 
 function Engine.KeepLinked()
     pendingJump = nil
+    if ns.Debug then ns.Debug.Stat("keepLinked") end
 end
 
 function Engine.GetSelectedRoom()
@@ -1218,6 +1241,70 @@ end
 function Engine.SetPlayerToSelected()
     local r = Engine.GetSelectedRoom()
     if r then setCurrentRoom(r) end
+end
+
+function Engine.GetDebugStats()
+    local n = 0
+    for _ in pairs(rooms) do n = n + 1 end
+    return { rooms = n, pool = #pool }
+end
+
+-- Scan the map graph for structural problems. Returns a list of human-readable
+-- issue strings. Empty list == clean. Useful after dedups to confirm the merge
+-- left a consistent graph (asymmetric links and wall mismatches are the classic
+-- dedup failure modes).
+function Engine.AuditMap()
+    local issues = {}
+    local function add(fmt, ...) issues[#issues+1] = string.format(fmt, ...) end
+
+    -- Canvas-position occupancy map (grid-cell "crosses" are expected, so we
+    -- only flag exact same-canvas-cell overlaps, not shared maze cells).
+    local byPos = {}
+    for _, r in pairs(rooms) do
+        local pk = r.cx .. "," .. r.cy
+        byPos[pk] = byPos[pk] or {}
+        local lp = byPos[pk]; lp[#lp+1] = r.index
+    end
+
+    for _, r in pairs(rooms) do
+        -- Orphan: no neighbors (excluding the current room, which may be a lone start)
+        local linked = false
+        for dir = 1, 4 do if r.neighbors[dir] then linked = true; break end end
+        if not linked and r ~= current_room then
+            add("Room %d is orphaned (no neighbors).", r.index)
+        end
+
+        for dir = 1, 4 do
+            local n = r.neighbors[dir]
+            if n then
+                -- Dangling pointer to a room no longer in the map
+                if rooms[n.index] ~= n then
+                    add("Room %d -> %s points at a room not in the map.",
+                        r.index, C.direction_strings[dir])
+                else
+                    -- Asymmetric link: A->B but B does not point back A
+                    if n.neighbors[getOppositeDir(dir)] ~= r then
+                        add("Asymmetric link: room %d %s -> room %d, but no back-link.",
+                            r.index, C.direction_strings[dir], n.index)
+                    end
+                    -- Wall mismatch: one side walled, the other open
+                    if r.walls[dir] ~= n.walls[getOppositeDir(dir)] then
+                        add("Wall mismatch between rooms %d and %d (%s edge).",
+                            r.index, n.index, C.direction_strings[dir])
+                    end
+                end
+            end
+        end
+    end
+
+    -- Canvas overlaps (two rooms drawn on the exact same cell)
+    for pk, list in pairs(byPos) do
+        if #list > 1 then
+            add("Canvas overlap at cell %s: rooms %s.", pk, table.concat(list, ", "))
+        end
+    end
+
+    return issues
 end
 
 function Engine.GetCurrentRoom()  return current_room end

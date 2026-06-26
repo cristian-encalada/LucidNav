@@ -85,9 +85,11 @@ local function poiToRGB(poiC)
     return rgb and rgb[1], rgb and rgb[2], rgb and rgb[3]
 end
 
-local function refreshGridMap()
+local function refreshGridMap(skipCompute)
     if gridFrame == nil or not gridFrame:IsShown() then return end
-    computeGridPositions()
+    -- The caller (refreshMapViews) may have already computed positions this tick;
+    -- skip the redundant BFS in that case.
+    if not skipCompute then computeGridPositions() end
 
     local rooms = ns.Engine.GetRooms()
     local current_room = ns.Engine.GetCurrentRoom()
@@ -351,6 +353,56 @@ function GridMap.Show()
     refreshGridMap()
 end
 
-function GridMap.Refresh()
-    refreshGridMap()
+function GridMap.Refresh(skipCompute)
+    refreshGridMap(skipCompute)
+end
+
+local ROW_LETTERS = {"A","B","C","D","E","F","G","H"}
+local function cellName(col, row)
+    if not (col and row) then return "?" end
+    return (ROW_LETTERS[row] or "?") .. col
+end
+
+-- Map each room's grid cell to a readable "C6"-style name. Returns a sorted
+-- (by room index) list of "room N = H6" strings for `/ln grid`.
+function GridMap.DumpCells()
+    computeGridPositions()
+    local rooms = ns.Engine.GetRooms()
+    local out = {}
+    for _, r in pairs(rooms) do
+        out[#out+1] = { idx = r.index, txt = string.format("room %d = %s", r.index, cellName(r.gcol, r.grow)) }
+    end
+    table.sort(out, function(a, b) return a.idx < b.idx end)
+    local lines = {}
+    for _, e in ipairs(out) do lines[#lines+1] = e.txt end
+    return lines
+end
+
+-- Wrap-model audit: for every neighbor link, compare where the ±4 wrap model
+-- (flipSidesGrid) PREDICTS the neighbor sits vs. where BFS ACTUALLY placed it.
+-- Mismatches mean the model disagrees with the explored graph along that edge
+-- (the classic symptom: physically-adjacent rooms in non-adjacent grid cells).
+function GridMap.AuditWrap()
+    computeGridPositions()
+    local rooms = ns.Engine.GetRooms()
+    local dcol = {0, 1, 0, -1}
+    local drow = {-1, 0, 1, 0}
+    local out = {}
+    for _, r in pairs(rooms) do
+        if r.gcol and r.grow then
+            for dir = 1, 4 do
+                local n = r.neighbors[dir]
+                if n and n.gcol and n.grow then
+                    local pc, pr = gridWrap(r.gcol + dcol[dir], r.grow + drow[dir])
+                    if pc ~= n.gcol or pr ~= n.grow then
+                        out[#out+1] = string.format(
+                            "%s %s-> room %d: model predicts %s, but room %d is at %s.",
+                            cellName(r.gcol, r.grow), C.direction_strings[dir]:sub(1,1),
+                            n.index, cellName(pc, pr), n.index, cellName(n.gcol, n.grow))
+                    end
+                end
+            end
+        end
+    end
+    return out
 end
