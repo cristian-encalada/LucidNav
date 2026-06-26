@@ -1126,10 +1126,15 @@ function Engine.HitTheTrap()
         current_room.is_trap = true; trapRoom = current_room
         recolorRoom(current_room)
         print("Room " .. current_room.index .. " marked as the teleport trap room (orange on map).")
-        prevRoom.neighbors[last_dir] = nil; prevRoom.walls[last_dir] = true
+        -- Wall the passage on BOTH sides but KEEP the neighbor links. Keeping the
+        -- trap connected to its entrance lets the Grid Map place it via BFS; a
+        -- disconnected trap falls back to imprecise cx/cy placement and visually
+        -- overlaps other cells. is_trap + walls still stop navigation from routing
+        -- through it, and a re-entry is recognised rather than duplicated.
+        prevRoom.walls[last_dir]                  = true
+        current_room.walls[getOppositeDir(last_dir)] = true
         print("Room " .. prevRoom.index .. "'s " .. C.direction_strings[last_dir] .. " exit walled off.")
         recolorRoom(prevRoom)
-        current_room.neighbors[getOppositeDir(last_dir)] = nil
     else
         print("Warning: could not identify the trap room entrance. Creating new room for current position.")
     end
