@@ -135,12 +135,35 @@ local function refreshGridMap(skipCompute)
                 local hasTrap, bestPoiC, bestPoiT = false, nil, nil
                 local labelParts = {}
 
+                -- Trusted anchor: the current room and the start room (index 1)
+                -- have a known-correct grid placement. When one of them lands in
+                -- a cell it defines that cell's identity, so a room that the ±4
+                -- edge-wrap misplaced onto it can't bleed a wrong POI colour (e.g.
+                -- a rune wrongly stacked on the plain start cell).
+                local anchor
+                for _, r in ipairs(rList) do
+                    if r == current_room then anchor = r; break end
+                end
+                if not anchor then
+                    for _, r in ipairs(rList) do
+                        if r.index == 1 then anchor = r; break end
+                    end
+                end
+
                 for _, r in ipairs(rList) do
                     if r == current_room then isCurrentHere = true end
-                    if r.is_trap then hasTrap = true end
-                    local poiC, poiT = getRoomPOI(r)
-                    if poiC ~= nil and bestPoiC == nil then bestPoiC, bestPoiT = poiC, poiT end
                     labelParts[#labelParts+1] = r.index
+                    if not anchor then
+                        if r.is_trap then hasTrap = true end
+                        local poiC, poiT = getRoomPOI(r)
+                        if poiC ~= nil and bestPoiC == nil then bestPoiC, bestPoiT = poiC, poiT end
+                    end
+                end
+                local primaryIdx = labelParts[1]
+                if anchor then
+                    hasTrap = (anchor.is_trap == true)
+                    bestPoiC, bestPoiT = getRoomPOI(anchor)
+                    primaryIdx = anchor.index
                 end
 
                 if hasTrap then
@@ -160,14 +183,14 @@ local function refreshGridMap(skipCompute)
                     cell.skull:Show()
                     cell.label:SetText("")
                 elseif isCross then
-                    if bestPoiC ~= nil then
-                        cell.label:SetText(labelParts[1] .. "+")
+                    if anchor or bestPoiC ~= nil then
+                        cell.label:SetText(primaryIdx .. "+")
                     else
                         local joined = table.concat(labelParts, "/")
-                        cell.label:SetText(#joined > 6 and labelParts[1] .. "+" or joined)
+                        cell.label:SetText(#joined > 6 and primaryIdx .. "+" or joined)
                     end
                 else
-                    cell.label:SetText(labelParts[1] or "")
+                    cell.label:SetText(primaryIdx or "")
                 end
 
                 -- POI icon: show rune or orb texture in the bottom-right corner.

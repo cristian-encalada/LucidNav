@@ -42,7 +42,7 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 
 ![Navigation with step counts](assets/img/navigation-step-counts.png)
 
-![Grid map edge-wrap hint](assets/img/gridmap-edge-wrap.png)
+![8×8 Grid Map with bold walls and edge-wrap hint](assets/img/gridmap.png)
 
 ---
 

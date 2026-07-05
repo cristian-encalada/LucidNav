@@ -47,6 +47,12 @@ All notable changes to this project will be documented in this file.
   the same "never traverse a trap" rule as navigation, so displayed counts match
   the real guidance length (previously a count could be short by the steps saved
   by cutting through the trap, dropping the final direction from the guidance).
+- **Grid Map no longer shows a false POI on the start cell.** When the ±4
+  edge-wrap piled a POI room onto the start cell (A1), the grid tinted the plain
+  start room with that POI's colour (e.g. a purple rune after login). The
+  current room and the start room are now trusted anchors that define their own
+  cell, so a mis-wrapped room can't bleed a wrong colour onto them. Real POIs on
+  ordinary cells are unaffected.
 
 ### Docs
 - Documented the new features in the README and corrected the maze-reset
