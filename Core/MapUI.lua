@@ -249,11 +249,11 @@ local function buildMarkerPanel(maze)
     navTitle:SetTextColor(0.8, 0.8, 0.8, 1)
 
     maze.guidance_buttons = {}
-    local BTN_H = 11
+    local BTN_H = 12
     for i = 1, 12 do
         local btn = CreateFrame("Button", nil, panel)
         btn:SetSize(148, BTN_H)
-        btn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 42 - (i-1)*BTN_H)
+        btn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 42 - (i-1)*(BTN_H+1))
         btn.target = i
         btn:SetScript("OnClick", function(self) ns.Engine.SetGuidance(self) end)
         -- Highlight on hover
@@ -266,14 +266,6 @@ local function buildMarkerPanel(maze)
         btn:SetFontString(fs)
         maze.guidance_buttons[i] = btn
     end
-
-    -- Suggested match-order line (below nav buttons, updated dynamically)
-    local suggLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    suggLbl:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 42 - 12*BTN_H - 4)
-    suggLbl:SetWidth(148)
-    suggLbl:SetJustifyH("LEFT")
-    suggLbl:SetText("")
-    maze.suggestion_label = suggLbl
 end
 
 ------------------------------------------------------------
@@ -556,23 +548,6 @@ function MapUI.UpdateWallButtons()
             wl:SetShown(r ~= nil and r.walls[d] == true)
         end
     end
-end
-
-local colorAbbr = {"Yel", "Blu", "Red", "Grn", "Pur"}
-
-function MapUI.UpdateSuggestion()
-    if not (ns.maze and ns.maze.suggestion_label) then return end
-    local lbl = ns.maze.suggestion_label
-    local order, cost = ns.Engine.GetSuggestedMatchOrder()
-    if not order or #order == 0 then
-        lbl:SetText("|cff555555All pairs matched!|r")
-        return
-    end
-    local parts = {}
-    for _, ci in ipairs(order) do
-        parts[#parts+1] = "|cff" .. C.poi_hex_colors[ci] .. colorAbbr[ci] .. "|r"
-    end
-    lbl:SetText("Path: " .. table.concat(parts, ">") .. " |cff888888(" .. cost .. ")|r")
 end
 
 function MapUI.UpdateMatchButtons()
