@@ -176,7 +176,9 @@ local function buildMarkerPanel(maze)
 
     -- poi_buttons[1..5]  = rune icon textures (for tinting)
     -- poi_buttons[6..10] = orb icon textures
-    maze.poi_buttons = {}
+    maze.poi_buttons   = {}
+    -- match_buttons[1..5] = toggle buttons to mark color pairs as done
+    maze.match_buttons = {}
 
     local runeIconSuffixes = {"yellow","blue","orange","green","purple"}
     local ROW_H = 27   -- tightened from 30 to fit within the shorter panel
@@ -216,6 +218,19 @@ local function buildMarkerPanel(maze)
         lbl:SetPoint("LEFT", orb, "RIGHT", 6, 0)
         lbl:SetText("|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. "|r")
         lbl:SetJustifyH("LEFT")
+
+        -- Match toggle: small button on the right edge of the row
+        local matchBtn = CreateFrame("Button", nil, panel)
+        matchBtn:SetSize(20, 20)
+        matchBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, y + 3)
+        local matchFs = matchBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        matchFs:SetAllPoints(); matchFs:SetJustifyH("CENTER")
+        matchBtn:SetFontString(matchFs)
+        matchBtn:SetText("|cff555555o|r")
+        matchBtn.colorIdx = i
+        matchBtn:SetScript("OnClick", function(self) ns.Engine.ToggleMatched(self.colorIdx) end)
+        tip(matchBtn, "Mark " .. C.color_strings[i] .. " pair as matched/unmatched")
+        maze.match_buttons[i] = matchBtn
     end
 
     -- Clear button
@@ -531,6 +546,20 @@ function MapUI.UpdateWallButtons()
     if ns.maze.ref_wall_lines then
         for d, wl in pairs(ns.maze.ref_wall_lines) do
             wl:SetShown(r ~= nil and r.walls[d] == true)
+        end
+    end
+end
+
+function MapUI.UpdateMatchButtons()
+    if not (ns.maze and ns.maze.match_buttons) then return end
+    for i = 1, 5 do
+        local btn = ns.maze.match_buttons[i]
+        if btn then
+            if ns.Engine.IsMatched(i) then
+                btn:SetText("|cff44cc44v|r")
+            else
+                btn:SetText("|cff555555o|r")
+            end
         end
     end
 end

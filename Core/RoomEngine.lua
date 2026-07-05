@@ -23,6 +23,9 @@ local pendingJump  = nil   -- set when jump dialog is open
 
 local runeIconSuffixes = {"yellow", "blue", "orange", "green", "purple"}
 
+-- matched_pairs[i] = true when the color-i rune+orb pair has been activated together.
+local matched_pairs = {}
+
 -- Frame levels so overlapping/abutting cells stay clickable: base cells sit
 -- low, the current room is raised, and the selected room is raised highest.
 local FL_BASE, FL_CURRENT, FL_SELECTED = 2, 5, 8
@@ -566,6 +569,7 @@ end
 
 local function resetMap()
     eraseRooms()
+    wipe(matched_pairs)
     map[1] = newRoom()
     map[1].cx = 0; map[1].cy = 0
     last_room_number = 0
@@ -978,8 +982,9 @@ logoutFrame:SetScript("OnEvent", function(self, event, isInitialLogin, isReloadi
     if event ~= "PLAYER_LOGOUT" then return end
     if rooms == nil then return end
     if LucidNavDB == nil then LucidNavDB = {} end
-    LucidNavDB.mapData   = Engine.SerializeMap()
-    LucidNavDB.last_saved = os.date("%Y-%m-%d %H:%M")
+    LucidNavDB.mapData      = Engine.SerializeMap()
+    LucidNavDB.last_saved   = os.date("%Y-%m-%d %H:%M")
+    LucidNavDB.matched_pairs = matched_pairs
 end)
 
 function Engine.IsFreshLogin() return sessionIsFreshLogin end
@@ -1129,6 +1134,10 @@ function Engine.LoadSavedMap()
         local validCurrent = current_room and rooms[current_room.index] == current_room
         if (sessionIsFreshLogin or not validCurrent) and rooms[1] then
             last_dir = C.north; setCurrentRoom(rooms[1])
+        end
+        if LucidNavDB.matched_pairs then
+            wipe(matched_pairs)
+            for i = 1, 5 do matched_pairs[i] = LucidNavDB.matched_pairs[i] == true end
         end
     else
         resetMap()
@@ -1454,6 +1463,18 @@ function Engine.GetPoiRooms()     return poirooms end
 function Engine.GetTrapRoom()     return trapRoom end
 function Engine.GetNavTarget()    return navtarget end
 
+function Engine.IsMatched(colorIndex)
+    return matched_pairs[colorIndex] == true
+end
+
+function Engine.ToggleMatched(colorIndex)
+    if colorIndex < 1 or colorIndex > 5 then return end
+    matched_pairs[colorIndex] = not matched_pairs[colorIndex]
+    Engine.UpdatePOIButtonText()
+    Engine.UpdateNavButtonText()
+    if ns.MapUI then ns.MapUI.UpdateMatchButtons() end
+end
+
 function Engine.UpdatePOIButtonText()
     if not (ns.maze and ns.maze.poi_buttons) then return end
     local poi_buttons = ns.maze.poi_buttons
@@ -1461,19 +1482,14 @@ function Engine.UpdatePOIButtonText()
         local runeTex = poi_buttons[i]
         local orbTex  = poi_buttons[i+5]
         local rgb = C.poi_rgb[i]
+        local isMatched = matched_pairs[i]
         if runeTex then
-            if poirooms[i] ~= nil then
-                runeTex:SetVertexColor(rgb[1]*0.4, rgb[2]*0.4, rgb[3]*0.4)
-            else
-                runeTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
-            end
+            local dim = isMatched and 0.15 or (poirooms[i] ~= nil and 0.4 or 1.0)
+            runeTex:SetVertexColor(rgb[1]*dim, rgb[2]*dim, rgb[3]*dim)
         end
         if orbTex then
-            if poirooms[i+5] ~= nil then
-                orbTex:SetVertexColor(rgb[1]*0.4, rgb[2]*0.4, rgb[3]*0.4)
-            else
-                orbTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
-            end
+            local dim = isMatched and 0.15 or (poirooms[i+5] ~= nil and 0.4 or 1.0)
+            orbTex:SetVertexColor(rgb[1]*dim, rgb[2]*dim, rgb[3]*dim)
         end
     end
 end
@@ -1485,27 +1501,40 @@ function Engine.UpdateNavButtonText()
     for i = 1, 12 do
         local btn = guidance_buttons[i]
         if not btn then break end
-        local text
-        if i == 11 then
-            text = "Unexplored Territory"
-        elseif i == 12 then
-            text = "Teleport Trap"
-        elseif i > 5 then
-            text = "|cff" .. C.poi_hex_colors[i-5] .. C.color_strings[i-5] .. " Orb|r"
-        else
-            text = "|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. " Rune|r"
-        end
-        -- Append step count for known POI rooms and the trap room.
+
+        local colorIdx = (i <= 5 and i) or (i <= 10 and i - 5) or nil
+        local isMatched = colorIdx and matched_pairs[colorIdx]
         local targetRoom = (i <= 10) and poirooms[i] or (i == 12 and trapRoom or nil)
-        if targetRoom ~= nil then
-            local steps = dist[targetRoom]
-            if steps ~= nil and steps > 0 then
-                text = text .. " |cffaaaaaa(" .. steps .. ")|r"
-            elseif steps == 0 then
-                text = text .. " |cff00ff00(here)|r"
+        local steps = targetRoom and dist[targetRoom]
+
+        local text
+        if isMatched then
+            local name = (i <= 5) and (C.color_strings[i] .. " Rune") or (C.color_strings[i-5] .. " Orb")
+            text = "|cff44cc44v|r |cff555555" .. name
+            if steps and steps > 0 then text = text .. " (" .. steps .. ")"
+            elseif steps == 0 then text = text .. " (here)" end
+            text = text .. "|r"
+        else
+            if i == 11 then
+                text = "Unexplored Territory"
+            elseif i == 12 then
+                text = "Teleport Trap"
+            elseif i > 5 then
+                text = "|cff" .. C.poi_hex_colors[i-5] .. C.color_strings[i-5] .. " Orb|r"
+            else
+                text = "|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. " Rune|r"
+            end
+            if targetRoom ~= nil then
+                if steps ~= nil and steps > 0 then
+                    text = text .. " |cffaaaaaa(" .. steps .. ")|r"
+                elseif steps == 0 then
+                    text = text .. " |cff00ff00(here)|r"
+                end
             end
         end
+
         if i == navtarget then text = "[" .. text .. "]" end
         btn:SetText(text)
     end
+    if ns.MapUI then ns.MapUI.UpdateMatchButtons() end
 end
