@@ -116,6 +116,7 @@ local function refreshGridMap(skipCompute)
             cell.skull:Hide()
             cell.poi_icon:Hide()
             cell.playerArrow:Hide()
+            cell.wrapGlow:Hide()
             cell:SetBackdropColor(0.1, 0.1, 0.1, 1)
             cell:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
             for d = 1, 4 do
@@ -219,6 +220,53 @@ end
 local GRID_RM = 22  -- right margin for wrap offset labels
 local GRID_BM = 22  -- bottom margin for wrap offset labels
 
+------------------------------------------------------------
+-- Edge-wrap hint: hovering a cell on the grid border lights up the cell you'd
+-- actually reappear in after the ±4 twist wrap (Pac-Man-style tunnel), with a
+-- tooltip naming it. Makes the otherwise-invisible wrap offset obvious.
+------------------------------------------------------------
+local WRAP_DIR_NAMES  = {"North", "East", "South", "West"}
+local WRAP_ROW_LABELS = {"A","B","C","D","E","F","G","H"}
+local wrapDcol = {0, 1, 0, -1}
+local wrapDrow = {-1, 0, 1, 0}
+local wrapGlowActive = {}
+
+local function hideWrapHint()
+    for _, g in ipairs(wrapGlowActive) do g:Hide() end
+    wipe(wrapGlowActive)
+    GameTooltip:Hide()
+end
+
+local function showWrapHint(cell)
+    hideWrapHint()
+    local col, row = cell.slotCol, cell.slotRow
+    local hints = {}
+    for dir = 1, 4 do
+        local nc, nr = col + wrapDcol[dir], row + wrapDrow[dir]
+        local wc, wr = gridWrap(nc, nr)
+        if wc ~= nc or wr ~= nr then  -- this direction leaves the grid and wraps
+            local dest = gridCells[wc] and gridCells[wc][wr]
+            if dest then
+                dest.wrapGlow:SetColorTexture(1, 0.55, 0.1, 0.5)  -- orange: you emerge here
+                dest.wrapGlow:Show()
+                wrapGlowActive[#wrapGlowActive+1] = dest.wrapGlow
+                hints[#hints+1] = WRAP_DIR_NAMES[dir] .. " -> " .. WRAP_ROW_LABELS[wr] .. wc
+            end
+        end
+    end
+    if #hints == 0 then return end  -- interior cell: nothing to wrap
+
+    cell.wrapGlow:SetColorTexture(1, 1, 1, 0.22)  -- subtle: the cell you're on
+    cell.wrapGlow:Show()
+    wrapGlowActive[#wrapGlowActive+1] = cell.wrapGlow
+
+    GameTooltip:SetOwner(cell, "ANCHOR_RIGHT")
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine("Edge wrap")
+    for _, h in ipairs(hints) do GameTooltip:AddLine(h, 1, 0.82, 0) end
+    GameTooltip:Show()
+end
+
 local function createGridMap()
     local frameW = GCOFF_X + 8*GCELL + 7*GCPAD + GRID_RM
     local frameH = GCOFF_Y + 8*GCELL + 7*GCPAD + GRID_BM
@@ -265,6 +313,24 @@ local function createGridMap()
             cell:SetBackdropColor(0.1,0.1,0.1,1)
             cell:SetBackdropBorderColor(0.22,0.22,0.22,1)
             cell:SetFrameLevel(21)
+
+            -- Translucent fill (above the cell background, below the number) used
+            -- to highlight edge-wrap partners on hover.
+            cell.wrapGlow = cell:CreateTexture(nil,"ARTWORK")
+            cell.wrapGlow:SetAllPoints()
+            cell.wrapGlow:Hide()
+
+            -- Grid slot coords + hover hooks for the edge-wrap hint. Motion-only
+            -- mouse so left-click drag still pans the grid frame underneath.
+            cell.slotCol, cell.slotRow = col, row
+            if cell.SetMouseMotionEnabled then
+                cell:SetMouseMotionEnabled(true)
+            else
+                cell:EnableMouse(true)
+                if cell.SetMouseClickEnabled then cell:SetMouseClickEnabled(false) end
+            end
+            cell:SetScript("OnEnter", showWrapHint)
+            cell:SetScript("OnLeave", hideWrapHint)
 
             cell.label = cell:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
             cell.label:SetPoint("CENTER")
