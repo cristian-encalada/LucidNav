@@ -36,6 +36,9 @@ All notable changes to this project will be documented in this file.
 - **Overlapping / cross rooms now use an amber tint** instead of dashed walls,
   so intentional maze crosses no longer look like broken/unresolved walls
   (dashes were confusing right after a Jump Over).
+- **Clearer 8×8 Grid Map.** Dropped the cyan cross-cell borders and the dashed
+  wall segments (visual noise); blocked edges now draw as a single bold solid
+  bar so the grid reads plainly as a map of the maze walls.
 - Navigation detection messages dropped the `Hello, user!` prefix for a cleaner
   readout on each room change.
 
