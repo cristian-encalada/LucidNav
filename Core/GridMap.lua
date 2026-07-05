@@ -121,7 +121,6 @@ local function refreshGridMap(skipCompute)
             cell:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
             for d = 1, 4 do
                 cell.wall[d]:Hide()
-                for k = 1, #cell.wallDash[d] do cell.wallDash[d][k]:Hide() end
             end
         end
     end
@@ -186,19 +185,13 @@ local function refreshGridMap(skipCompute)
 
                 -- Wall lines: an edge is walled if every room in the cell is
                 -- walled there (any occupying room's passage opens the side).
-                -- Cross cells draw dashed walls to match the canvas convention.
+                -- Always solid so the maze walls read clearly at a glance.
                 for dir = 1, 4 do
                     local walled = true
                     for _, r in ipairs(rList) do
                         if not r.walls[dir] then walled = false; break end
                     end
-                    if walled then
-                        if isCross then
-                            for k = 1, #cell.wallDash[dir] do cell.wallDash[dir][k]:Show() end
-                        else
-                            cell.wall[dir]:Show()
-                        end
-                    end
+                    if walled then cell.wall[dir]:Show() end
                 end
 
                 if isCurrentHere then
@@ -207,8 +200,6 @@ local function refreshGridMap(skipCompute)
                     -- player's current facing (grid refreshes on each room change).
                     cell.playerArrow:SetRotation(GetPlayerFacing() or 0)
                     cell.playerArrow:Show()
-                elseif isCross then
-                    cell:SetBackdropBorderColor(0, 0.85, 0.85, 1)
                 end
             end
         end
@@ -355,16 +346,13 @@ local function createGridMap()
             cell.playerArrow:SetPoint("CENTER")
             cell.playerArrow:Hide()
 
-            -- Paper-style wall lines per edge: one full-edge solid bar plus a
-            -- set of dash segments (shown for non-intersecting-cross cells).
-            cell.wall     = {}
-            cell.wallDash = {}
-            local gth, gn, ggap = 2, 3, 3
+            -- Wall lines per edge: one bold, full-length bar so blocked passages
+            -- read clearly as maze walls. Drawn at OVERLAY sublevel 4 so they sit
+            -- above the wrap-glow highlight.
+            cell.wall = {}
+            local gth = 3
             for dir = 1, 4 do
-                local horizontal = (dir == C.north or dir == C.south)
-                local segLen = (GCELL - (gn - 1) * ggap) / gn
-
-                local s = cell:CreateTexture(nil, "OVERLAY")
+                local s = cell:CreateTexture(nil, "OVERLAY", nil, 4)
                 s:SetColorTexture(unpack(C.wallColor)); s:Hide()
                 if     dir == C.north then s:SetSize(GCELL, gth); s:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0, 0)
                 elseif dir == C.south then s:SetSize(GCELL, gth); s:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", 0, 0)
@@ -372,21 +360,6 @@ local function createGridMap()
                 else                       s:SetSize(gth, GCELL); s:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0, 0)
                 end
                 cell.wall[dir] = s
-
-                local dts = {}
-                for k = 1, gn do
-                    local d = cell:CreateTexture(nil, "OVERLAY")
-                    d:SetColorTexture(unpack(C.wallColor)); d:Hide()
-                    local off = (k - 1) * (segLen + ggap)
-                    if horizontal then d:SetSize(segLen, gth) else d:SetSize(gth, segLen) end
-                    if     dir == C.north then d:SetPoint("TOPLEFT",    cell, "TOPLEFT",    off,  0)
-                    elseif dir == C.south then d:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", off,  0)
-                    elseif dir == C.east  then d:SetPoint("TOPRIGHT",   cell, "TOPRIGHT",   0,   -off)
-                    else                       d:SetPoint("TOPLEFT",    cell, "TOPLEFT",    0,   -off)
-                    end
-                    dts[k] = d
-                end
-                cell.wallDash[dir] = dts
             end
 
             gridCells[col][row] = cell
