@@ -591,7 +591,8 @@ end
 local function qEmpty(q, min, max) return min>max end
 
 -- BFS from startRoom respecting walls; returns {room -> stepCount} for all
--- reachable rooms. Used by UpdateNavButtonText to show step counts.
+-- reachable rooms. Mirrors navigateToTarget: trap rooms can be reached as a
+-- final destination but are never traversed through (same rule as navigation).
 local function bfsDistances(startRoom)
     if startRoom == nil then return {} end
     local dist = {}
@@ -600,11 +601,13 @@ local function bfsDistances(startRoom)
     qe = qe + 1; q[qe] = startRoom
     while qi <= qe do
         local cur = q[qi]; qi = qi + 1
-        local d = dist[cur]
-        for i = 1, 4 do
-            local n = cur.neighbors[i]
-            if n ~= nil and cur.walls[i] == false and dist[n] == nil then
-                dist[n] = d + 1; qe = qe + 1; q[qe] = n
+        if not cur.is_trap then  -- don't expand through trap rooms
+            local d = dist[cur]
+            for i = 1, 4 do
+                local n = cur.neighbors[i]
+                if n ~= nil and cur.walls[i] == false and dist[n] == nil then
+                    dist[n] = d + 1; qe = qe + 1; q[qe] = n
+                end
             end
         end
     end
