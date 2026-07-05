@@ -21,6 +21,8 @@ local poi_warned   = 0
 
 local pendingJump  = nil   -- set when jump dialog is open
 
+local runeIconSuffixes = {"yellow", "blue", "orange", "green", "purple"}
+
 -- Frame levels so overlapping/abutting cells stay clickable: base cells sit
 -- low, the current room is raised, and the selected room is raised highest.
 local FL_BASE, FL_CURRENT, FL_SELECTED = 2, 5, 8
@@ -137,6 +139,12 @@ local function createCell()
     skull:SetPoint("CENTER")
     skull:Hide()
     btn.skullTex = skull
+
+    local poiIcon = btn:CreateTexture(nil, "OVERLAY")
+    poiIcon:SetSize(13, 13)
+    poiIcon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -3, 3)
+    poiIcon:Hide()
+    btn.poiIcon = poiIcon
 
     -- Amber tint shown when this room shares a maze grid cell with another (cross/overlap).
     local overlapTex = btn:CreateTexture(nil, "BACKGROUND", nil, 2)
@@ -263,18 +271,25 @@ local function recolorRoom(r)
     if r.is_trap then
         btn.midTex:SetColorTexture(unpack(C.cellColor.trap))
         btn.borderTex:SetColorTexture(unpack(C.cellColor.trapBorder))
+        btn.poiIcon:Hide()
     elseif r.POI_c then
         local rgb = C.poi_rgb[r.POI_c]
         if r.POI_t == "rune" then
             btn.midTex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
             btn.borderTex:SetColorTexture(unpack(C.cellColor.borderVisited))
+            btn.poiIcon:SetTexture("interface\\icons\\boss_odunrunes_" .. (runeIconSuffixes[r.POI_c] or "yellow"))
+            btn.poiIcon:SetVertexColor(1, 1, 1, 1)
         else
             btn.midTex:SetColorTexture(unpack(C.cellColor.visited))
             btn.borderTex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
+            btn.poiIcon:SetTexture("interface\\icons\\spell_broker_orb")
+            btn.poiIcon:SetVertexColor(rgb[1], rgb[2], rgb[3], 1)
         end
+        btn.poiIcon:Show()
     else
         btn.midTex:SetColorTexture(unpack(C.cellColor.visited))
         btn.borderTex:SetColorTexture(unpack(C.cellColor.borderVisited))
+        btn.poiIcon:Hide()
     end
     -- Flag disconnected (orphaned) rooms so they are easy to spot and delete.
     -- The current room is exempt so a fresh single-room map is not flagged.
@@ -304,6 +319,7 @@ local function createButton(r)
     btn.midTex:SetColorTexture(unpack(C.cellColor.default))
     btn.borderTex:SetColorTexture(unpack(C.cellColor.border))
     btn.overlapTex:Hide()
+    btn.poiIcon:Hide()
     for i = 1, 4 do
         local e = btn.walls[i]
         e.solid:Hide()
