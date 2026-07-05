@@ -26,6 +26,11 @@ local runeIconSuffixes = {"yellow", "blue", "orange", "green", "purple"}
 -- matched_pairs[i] = true when the color-i rune+orb pair has been activated together.
 local matched_pairs = {}
 
+-- Last-known reachability of each known POI (keyed by poi_index 1..10). Lets us
+-- warn exactly once when a POI flips from reachable to unreachable (e.g. a wall
+-- toggle just sealed it off), instead of spamming every refresh.
+local poiReachable = {}
+
 -- Frame levels so overlapping/abutting cells stay clickable: base cells sit
 -- low, the current room is raised, and the selected room is raised highest.
 local FL_BASE, FL_CURRENT, FL_SELECTED = 2, 5, 8
@@ -557,7 +562,7 @@ local function eraseRooms()
             pool[#pool + 1] = v.button
         end
     end
-    wipe(rooms); wipe(map); wipe(poirooms)
+    wipe(rooms); wipe(map); wipe(poirooms); wipe(poiReachable)
     trapRoom    = nil
     last_dir    = C.north
     selected_btn = nil
@@ -1183,6 +1188,9 @@ function Engine.ToggleWall(btn, dir)
     -- already updated the canvas). Pass skipCompute so no grid BFS runs either.
     if ns.GridMap then ns.GridMap.Refresh(true) end
     if ns.MapUI then ns.MapUI.UpdateWallButtons() end
+    -- Refresh step counts and run the reachability audit: a wall toggle can seal
+    -- off a whole pocket, so this is exactly where we want to catch it.
+    Engine.UpdateNavButtonText()
 end
 
 function Engine.SetPOI(self)
@@ -1539,5 +1547,28 @@ function Engine.UpdateNavButtonText()
         if i == navtarget then text = "[" .. text .. "]" end
         btn:SetText(text)
     end
+
+    -- Audit: warn once when a known POI flips from reachable to unreachable —
+    -- the classic symptom of accidentally walling off a whole pocket of rooms.
+    if current_room then
+        for i = 1, 10 do
+            local room = poirooms[i]
+            if room then
+                local reachable = (dist[room] ~= nil)
+                if poiReachable[i] and not reachable then
+                    local name = (i <= 5) and (C.color_strings[i] .. " Rune")
+                                           or  (C.color_strings[i-5] .. " Orb")
+                    local hex  = (i <= 5) and C.poi_hex_colors[i] or C.poi_hex_colors[i-5]
+                    print("|cffff8800LucidNav warning:|r |cff" .. hex .. name .. "|r (room "
+                          .. room.index .. ") is no longer reachable from here — you may have walled it off.")
+                    if ns.Debug then ns.Debug.Stat("poiUnreachableWarn") end
+                end
+                poiReachable[i] = reachable
+            else
+                poiReachable[i] = nil
+            end
+        end
+    end
+
     if ns.MapUI then ns.MapUI.UpdateMatchButtons() end
 end
