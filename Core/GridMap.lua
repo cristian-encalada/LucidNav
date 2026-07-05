@@ -12,6 +12,8 @@ local GCPAD   = 1
 local GCOFF_X = 18
 local GCOFF_Y = 16
 
+local runeIconSuffixes = {"yellow", "blue", "orange", "green", "purple"}
+
 local function flipSidesGrid(p)
     return p < 5 and p + 4 or p - 4
 end
@@ -112,6 +114,7 @@ local function refreshGridMap(skipCompute)
             local cell = gridCells[col][row]
             cell.label:SetText("")
             cell.skull:Hide()
+            cell.poi_icon:Hide()
             cell:SetBackdropColor(0.1, 0.1, 0.1, 1)
             cell:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
             for d = 1, 4 do
@@ -136,9 +139,7 @@ local function refreshGridMap(skipCompute)
                     if r.is_trap then hasTrap = true end
                     local poiC, poiT = getRoomPOI(r)
                     if poiC ~= nil and bestPoiC == nil then bestPoiC, bestPoiT = poiC, poiT end
-                    local prefix = ""
-                    if poiC ~= nil then prefix = (poiT == "rune") and "R" or "O" end
-                    labelParts[#labelParts+1] = prefix .. r.index
+                    labelParts[#labelParts+1] = r.index
                 end
 
                 if hasTrap then
@@ -166,6 +167,19 @@ local function refreshGridMap(skipCompute)
                     end
                 else
                     cell.label:SetText(labelParts[1] or "")
+                end
+
+                -- POI icon: show rune or orb texture in the bottom-right corner.
+                if bestPoiC ~= nil then
+                    if bestPoiT == "rune" then
+                        cell.poi_icon:SetTexture("interface\\icons\\boss_odunrunes_" .. (runeIconSuffixes[bestPoiC] or "yellow"))
+                        cell.poi_icon:SetVertexColor(1, 1, 1, 1)
+                    else
+                        cell.poi_icon:SetTexture("interface\\icons\\spell_broker_orb")
+                        local rgb = C.poi_rgb[bestPoiC]
+                        if rgb then cell.poi_icon:SetVertexColor(rgb[1], rgb[2], rgb[3], 1) end
+                    end
+                    cell.poi_icon:Show()
                 end
 
                 -- Wall lines: an edge is walled if every room in the cell is
@@ -256,6 +270,11 @@ local function createGridMap()
             cell.skull:SetSize(GCELL-12, GCELL-12)
             cell.skull:SetPoint("CENTER")
             cell.skull:Hide()
+
+            cell.poi_icon = cell:CreateTexture(nil,"OVERLAY")
+            cell.poi_icon:SetSize(14, 14)
+            cell.poi_icon:SetPoint("BOTTOMRIGHT", cell, "BOTTOMRIGHT", -2, 2)
+            cell.poi_icon:Hide()
 
             -- Paper-style wall lines per edge: one full-edge solid bar plus a
             -- set of dash segments (shown for non-intersecting-cross cells).
