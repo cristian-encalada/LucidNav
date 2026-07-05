@@ -465,6 +465,7 @@ local function setCurrentRoom(r)
 
     refreshMapViews()
     if ns.MapUI then ns.MapUI.UpdateWallButtons() end
+    Engine.UpdateNavButtonText()
 end
 
 ------------------------------------------------------------
@@ -584,6 +585,27 @@ local function qPop(q, min, max)
     return min+1, max, q[min]
 end
 local function qEmpty(q, min, max) return min>max end
+
+-- BFS from startRoom respecting walls; returns {room -> stepCount} for all
+-- reachable rooms. Used by UpdateNavButtonText to show step counts.
+local function bfsDistances(startRoom)
+    if startRoom == nil then return {} end
+    local dist = {}
+    local q = {}; local qi, qe = 1, 0
+    dist[startRoom] = 0
+    qe = qe + 1; q[qe] = startRoom
+    while qi <= qe do
+        local cur = q[qi]; qi = qi + 1
+        local d = dist[cur]
+        for i = 1, 4 do
+            local n = cur.neighbors[i]
+            if n ~= nil and cur.walls[i] == false and dist[n] == nil then
+                dist[n] = d + 1; qe = qe + 1; q[qe] = n
+            end
+        end
+    end
+    return dist
+end
 
 ------------------------------------------------------------
 -- Map deduplication
@@ -1459,6 +1481,7 @@ end
 function Engine.UpdateNavButtonText()
     if not (ns.maze and ns.maze.guidance_buttons) then return end
     local guidance_buttons = ns.maze.guidance_buttons
+    local dist = bfsDistances(current_room)
     for i = 1, 12 do
         local btn = guidance_buttons[i]
         if not btn then break end
@@ -1471,6 +1494,16 @@ function Engine.UpdateNavButtonText()
             text = "|cff" .. C.poi_hex_colors[i-5] .. C.color_strings[i-5] .. " Orb|r"
         else
             text = "|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. " Rune|r"
+        end
+        -- Append step count for known POI rooms and the trap room.
+        local targetRoom = (i <= 10) and poirooms[i] or (i == 12 and trapRoom or nil)
+        if targetRoom ~= nil then
+            local steps = dist[targetRoom]
+            if steps ~= nil and steps > 0 then
+                text = text .. " |cffaaaaaa(" .. steps .. ")|r"
+            elseif steps == 0 then
+                text = text .. " |cff00ff00(here)|r"
+            end
         end
         if i == navtarget then text = "[" .. text .. "]" end
         btn:SetText(text)
