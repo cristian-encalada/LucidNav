@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.0] - 2026-07-05
+
+### Added
+- **Rune & orb icons on the map.** POI rooms now show the actual rune glyph or
+  orb icon (tinted to the POI colour) in the corner of the cell — on both the
+  main canvas and the 8×8 Grid Map — instead of just a coloured cell / "R"/"O"
+  text prefix.
+- **Live step counts on navigation targets.** Each rune/orb/trap button shows
+  its distance from your current room (`(N)`), updated on every move, with
+  `(here)` when you're standing on it. Wall-aware and trap-aware, so the count
+  always matches the actual guidance route.
+- **Match tracker.** A per-colour ✓ toggle marks a rune+orb pair as matched;
+  matched pairs dim out and their nav buttons grey out, so you can see at a
+  glance what's left. State persists across `/reload` and resets with New Map.
+- **Unreachable-POI warning.** If a wall toggle accidentally seals off a known
+  rune or orb, LucidNav warns you in chat the moment it happens instead of
+  silently losing the route.
+- **Player arrow on the Grid Map.** Your current cell is marked with the same
+  facing arrow used on the main map, oriented to your heading.
+- **Current-room reference panel.** A 5-cell cross at the top-right with
+  **N/E/S/W buttons** to toggle the selected room's walls directly — no more
+  fiddly edge-clicking.
+- **Edge-hover wall highlight.** Hovering a cell edge highlights exactly which
+  wall you're about to toggle.
+- **Grid edge-wrap hints.** Hover a border cell in the Grid Map to light up the
+  exact cell you'd emerge in after the maze's ±4 wrap, with a tooltip naming it
+  (e.g. `South -> A7`) — Pac-Man-tunnel style.
+
+### Changed
+- **Overlapping / cross rooms now use an amber tint** instead of dashed walls,
+  so intentional maze crosses no longer look like broken/unresolved walls
+  (dashes were confusing right after a Jump Over).
+- Navigation detection messages dropped the `Hello, user!` prefix for a cleaner
+  readout on each room change.
+
+### Fixed
+- **Step counts no longer route through trap rooms.** `bfsDistances` now honours
+  the same "never traverse a trap" rule as navigation, so displayed counts match
+  the real guidance length (previously a count could be short by the steps saved
+  by cutting through the trap, dropping the final direction from the guidance).
+
+### Docs
+- Documented the new features in the README and corrected the maze-reset
+  explanation: the Endless Halls are regenerated per character from
+  `playerGUID + realm date` at ~realm midnight, **not** the instance lockout.
+
+---
+
 ## [1.4.0] - 2026-06-25
 
 ### Changed
