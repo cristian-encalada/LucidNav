@@ -1,0 +1,9 @@
+# Files kept in the repo but excluded from release archives (git archive /
+# release.sh). The packaged addon only needs the .toc + Lua + in-game docs;
+# screenshots and dev tooling would just bloat the download.
+assets/         export-ignore
+openspec/       export-ignore
+release/        export-ignore
+release.sh      export-ignore
+.gitattributes  export-ignore
+.gitignore      export-ignore
