@@ -1470,6 +1470,57 @@ function Engine.IsMatched(colorIndex)
     return matched_pairs[colorIndex] == true
 end
 
+-- Returns (orderedColorList, totalSteps) for the cheapest order to complete all
+-- unmatched, fully-known color pairs from the current room. Uses BFS distances
+-- between every relevant room and exhaustive permutation (≤5! = 120 tries).
+function Engine.GetSuggestedMatchOrder()
+    if current_room == nil then return nil, 0 end
+    local colors = {}
+    for i = 1, 5 do
+        if not matched_pairs[i] and poirooms[i] ~= nil and poirooms[i+5] ~= nil then
+            colors[#colors+1] = i
+        end
+    end
+    if #colors == 0 then return nil, 0 end
+
+    -- Lazy BFS cache keyed by room reference.
+    local distCache = {}
+    local function d(from, to)
+        if not from or not to then return math.huge end
+        if from == to then return 0 end
+        if not distCache[from] then distCache[from] = bfsDistances(from) end
+        return distCache[from][to] or math.huge
+    end
+
+    local bestOrder, bestCost = nil, math.huge
+    local function permute(arr, start)
+        if start > #arr then
+            local pos, cost = current_room, 0
+            for _, ci in ipairs(arr) do
+                local rune, orb = poirooms[ci], poirooms[ci+5]
+                local c1 = d(pos, rune) + d(rune, orb)
+                local c2 = d(pos, orb)  + d(orb,  rune)
+                if c1 <= c2 then cost = cost + c1; pos = orb
+                else              cost = cost + c2; pos = rune end
+                if cost >= bestCost then return end  -- prune
+            end
+            if cost < bestCost then
+                bestCost = cost
+                bestOrder = {}
+                for _, v in ipairs(arr) do bestOrder[#bestOrder+1] = v end
+            end
+            return
+        end
+        for i = start, #arr do
+            arr[start], arr[i] = arr[i], arr[start]
+            permute(arr, start + 1)
+            arr[start], arr[i] = arr[i], arr[start]
+        end
+    end
+    permute(colors, 1)
+    return bestOrder, bestCost
+end
+
 function Engine.ToggleMatched(colorIndex)
     if colorIndex < 1 or colorIndex > 5 then return end
     matched_pairs[colorIndex] = not matched_pairs[colorIndex]
@@ -1539,5 +1590,5 @@ function Engine.UpdateNavButtonText()
         if i == navtarget then text = "[" .. text .. "]" end
         btn:SetText(text)
     end
-    if ns.MapUI then ns.MapUI.UpdateMatchButtons() end
+    if ns.MapUI then ns.MapUI.UpdateMatchButtons(); ns.MapUI.UpdateSuggestion() end
 end
