@@ -91,3 +91,40 @@ cells in the gap, making each shared edge a single unambiguous click target.
 
 _Surfaced 2026-07-05 from screenshot review (reference: Lucid Nightmare Maze
 v0.2 wall placement style)._
+
+## Auto-detect maze regeneration (daily reset) and prompt for a fresh map
+**Problem:** The Endless Halls layout is regenerated **per character from the
+player ID + the current date** (evidence: Blizzard's "coming back the next day
+will present you with an entirely new challenge", plus player testing — a brief
+relog keeps the same maze, but the next day is entirely different). It changes
+at roughly **realm midnight (00:00 server time)**, unrelated to the 10:00 dungeon
+reset. Today LucidNav has no notion of this: after the day rolls over the saved
+map is stale, and the user has to notice the mismatch and click **New Map**
+manually. Worse, if they don't notice, navigation guides them through a maze
+that no longer exists.
+
+**Idea:** Detect regeneration automatically from the map data itself — the maze
+is deterministic, so the **starting room's signature** (its open/closed exits,
+and any POI/trap on it) is stable within a day. On entering the Halls / opening
+the addon:
+- Record a signature of room 1 (exit mask + POI) alongside the saved map, plus
+  the realm date it was captured (`C_DateAndTime.GetCurrentCalendarTime` or the
+  server clock).
+- On load, if the **realm date advanced** OR the freshly-observed start room's
+  signature no longer matches the saved one, conclude a new maze was generated.
+
+**Safety (important):** **Never auto-wipe.** A false positive would destroy a
+hard-won map. Instead **prompt**: _"The Endless Halls appear to have reset for a
+new day — start a fresh map? (Keep / New Map)."_ Only wipe on explicit confirm.
+Signature mismatch alone (without a date change) should be treated as low
+confidence — it can also mean a mis-marked wall — so lean on the date as the
+primary trigger and use the signature as corroboration.
+
+**Bonus:** stamp saves with the realm date so `LoadSavedMap` can show
+"map from <date>" and grey out / warn on a stale map even before movement.
+
+**Key files:** `RoomEngine.lua` (`LoadSavedMap`, `SerializeMap`/`ImportMap`,
+`ResetMap`), `Dialogs.lua` (confirm prompt, mirroring the existing reset dialog).
+
+_Surfaced 2026-07-05 from reset-timing research (realm-midnight regeneration,
+UTC-5 realm ≈ 02:00 UTC-3)._
