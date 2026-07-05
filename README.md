@@ -39,6 +39,8 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 ### Session
 - **Teleport trap handling** — automatically tracks and highlights the teleport trap room (orange); navigation never routes through it
 - **Persistent map** — maze progress saved on logout; on proper logout you respawn at room 1, on crash/DC you return to your last room
+- **Undo** — step back the last action in-memory (lost on `/reload`)
+- **Named checkpoints (Save / Restore)** — timestamped map snapshots that survive `/reload` and relog, so you can roll back to a good state after a mistake — no more screenshotting the map at every step
 
 ![Navigation with step counts](assets/img/navigation-step-counts.png)
 
@@ -64,6 +66,39 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 6. Use the **Navigation Target** buttons to get step-by-step directions to any POI or unexplored area — each shows its live step count from where you stand
 7. Once all 5 runes and 5 orbs are marked, work through the matches: hit the small **✓ toggle** on a color row to mark that rune+orb pair as done
 8. If you get teleported by the trap room, click **"I got ported!"** immediately — the room turns orange
+
+---
+
+## Saving progress & undoing mistakes
+
+Mapping the Endless Halls is long, and one wrong click (a mis-placed *"I got
+ported!"*, a bad de-duplicate, an overlapping room) can tangle the map. LucidNav
+has two safety nets so you never have to screenshot your progress:
+
+- **Undo** — reverts the **last action**. It's in-memory only, so it's instant
+  but is **lost on `/reload`** and only steps back one action at a time.
+- **Checkpoints (Save / Restore)** — the durable option. Click **Save** to store
+  a **timestamped snapshot** of the entire map (rooms, positions, walls, POIs,
+  trap). Click **Restore** to pick any earlier snapshot from the list (newest
+  first) and roll the whole map back to it.
+  - Snapshots are written to your SavedVariables, so they **survive `/reload`,
+    relog, crashes, and DCs**.
+  - A **Restore is itself undoable**, so trying one is safe.
+  - Keeps your **10 most recent** snapshots (the oldest is dropped automatically).
+
+**Recommended workflow:** click **Save** whenever you reach a clean milestone
+(each new rune/orb, before a risky de-dup, before pressing *"I got ported!"*).
+If a step goes wrong, **Restore** the last good snapshot instead of wiping and
+rebuilding from a screenshot.
+
+Slash-command equivalents:
+
+```
+/ln save [name]     -- save a checkpoint (defaults to the current time)
+/ln restore <name>  -- restore a named checkpoint
+/ln checkpoints     -- list saved checkpoints
+/ln undo            -- undo the last action
+```
 
 ---
 
