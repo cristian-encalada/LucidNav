@@ -115,6 +115,7 @@ local function refreshGridMap(skipCompute)
             cell.label:SetText("")
             cell.skull:Hide()
             cell.poi_icon:Hide()
+            cell.playerArrow:Hide()
             cell:SetBackdropColor(0.1, 0.1, 0.1, 1)
             cell:SetBackdropBorderColor(0.22, 0.22, 0.22, 1)
             for d = 1, 4 do
@@ -201,6 +202,10 @@ local function refreshGridMap(skipCompute)
 
                 if isCurrentHere then
                     cell:SetBackdropBorderColor(1, 1, 0, 1)
+                    -- Show the same player arrow as the main map, oriented to the
+                    -- player's current facing (grid refreshes on each room change).
+                    cell.playerArrow:SetRotation(GetPlayerFacing() or 0)
+                    cell.playerArrow:Show()
                 elseif isCross then
                     cell:SetBackdropBorderColor(0, 0.85, 0.85, 1)
                 end
@@ -275,6 +280,14 @@ local function createGridMap()
             cell.poi_icon:SetSize(14, 14)
             cell.poi_icon:SetPoint("BOTTOMRIGHT", cell, "BOTTOMRIGHT", -2, 2)
             cell.poi_icon:Hide()
+
+            -- Current-player arrow (same icon as the main map), drawn above the
+            -- label so the player's cell is unmistakable.
+            cell.playerArrow = cell:CreateTexture(nil,"OVERLAY",nil,7)
+            cell.playerArrow:SetTexture(C.player_icon)
+            cell.playerArrow:SetSize(GCELL-14, GCELL-14)
+            cell.playerArrow:SetPoint("CENTER")
+            cell.playerArrow:Hide()
 
             -- Paper-style wall lines per edge: one full-edge solid bar plus a
             -- set of dash segments (shown for non-intersecting-cross cells).
