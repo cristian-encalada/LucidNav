@@ -164,7 +164,8 @@ end
 ------------------------------------------------------------
 local function buildMarkerPanel(maze)
     local panel = CreateFrame("Frame", nil, maze)
-    panel:SetPoint("TOPRIGHT",    maze, "TOPRIGHT",    -5,  -55)
+    -- Top shifted down 80 px to leave room for the reference panel above.
+    panel:SetPoint("TOPRIGHT",    maze, "TOPRIGHT",    -5, -135)
     panel:SetPoint("BOTTOMRIGHT", maze, "BOTTOMRIGHT", -5,   90)
     panel:SetWidth(155)
 
@@ -178,14 +179,14 @@ local function buildMarkerPanel(maze)
     maze.poi_buttons = {}
 
     local runeIconSuffixes = {"yellow","blue","orange","green","purple"}
-    local ROW_H = 30
+    local ROW_H = 27   -- tightened from 30 to fit within the shorter panel
 
     for i = 1, 5 do
         local y = -22 - (i-1) * ROW_H
 
         -- Rune button
         local rune = CreateFrame("Button", nil, panel)
-        rune:SetSize(28, 28)
+        rune:SetSize(26, 26)   -- scaled from 28 to match tighter rows
         rune:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, y)
         local runeTex = rune:CreateTexture(nil,"ARTWORK")
         runeTex:SetAllPoints()
@@ -199,7 +200,7 @@ local function buildMarkerPanel(maze)
 
         -- Orb button
         local orb = CreateFrame("Button", nil, panel)
-        orb:SetSize(28, 28)
+        orb:SetSize(26, 26)   -- scaled from 28
         orb:SetPoint("TOPLEFT", panel, "TOPLEFT", 38, y)
         local orbTex = orb:CreateTexture(nil,"ARTWORK")
         orbTex:SetAllPoints()
@@ -220,7 +221,7 @@ local function buildMarkerPanel(maze)
     -- Clear button
     local clearBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     clearBtn:SetSize(68, 20)
-    clearBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 4)
+    clearBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 2)  -- gap tightened from -4
     clearBtn:SetText("Clear")
     clearBtn.poi_index = nil; clearBtn.t = nil; clearBtn.c = nil
     clearBtn:SetScript("OnClick", function(self) ns.Engine.SetPOI(self) end)
@@ -228,16 +229,16 @@ local function buildMarkerPanel(maze)
 
     -- Nav target section
     local navTitle = panel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    navTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 30)
+    navTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 26)  -- tightened from -30
     navTitle:SetText("Navigation Target:")
     navTitle:SetTextColor(0.8, 0.8, 0.8, 1)
 
     maze.guidance_buttons = {}
-    local BTN_H = 16
+    local BTN_H = 12   -- tightened from 16 to fit within the shorter panel
     for i = 1, 12 do
         local btn = CreateFrame("Button", nil, panel)
         btn:SetSize(148, BTN_H)
-        btn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 46 - (i-1)*(BTN_H+2))
+        btn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 42 - (i-1)*(BTN_H+1))  -- offset/gap tightened
         btn.target = i
         btn:SetScript("OnClick", function(self) ns.Engine.SetGuidance(self) end)
         -- Highlight on hover
@@ -282,6 +283,103 @@ local function buildCompass(maze, sf)
     dot:SetSize(4, 4)
     dot:SetPoint("CENTER")
     dot:SetColorTexture(0.6, 0.6, 0.6, 0.8)
+end
+
+------------------------------------------------------------
+-- Room reference panel (current room cross + N/E/S/W wall toggles)
+-- Sits at the top of the right column, 80 px tall, above the Markers section.
+--   • Center cell  — shows room index; edge lines mark walls that are set.
+--   • Direction cells — clickable; fill shows whether a neighbor exists.
+------------------------------------------------------------
+local function buildRoomReferencePanel(maze)
+    local panel = CreateFrame("Frame", nil, maze)
+    panel:SetPoint("TOPRIGHT", maze, "TOPRIGHT", -5, -55)
+    panel:SetSize(155, 80)
+
+    local bg = panel:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.08, 0.08, 0.08, 0.9)
+
+    local sep = panel:CreateTexture(nil, "BACKGROUND")
+    sep:SetSize(155, 1)
+    sep:SetPoint("BOTTOM", panel, "BOTTOM", 0, 0)
+    sep:SetColorTexture(0.28, 0.28, 0.28, 1)
+
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("TOP", panel, "TOP", 0, -3)
+    title:SetText("Current Room")
+    title:SetTextColor(0.8, 0.8, 0.8, 1)
+
+    -- 5-cell cross: CELL=18 px, GAP=2 px, STEP=20 px.
+    -- Total cross: 58 px wide/tall.  Left offset to centre in 155 px = 48 px.
+    local CELL = 18
+    local STEP = 20
+    local OX   = 48   -- x of column-1 (W) left edge
+    local OY   = -17  -- y of row-1 (N) top edge (3+12label+2gap from panel top)
+
+    local dirPos = {
+        [C.north] = {OX + STEP,      OY},
+        [C.west]  = {OX,             OY - STEP},
+        [C.east]  = {OX + 2 * STEP,  OY - STEP},
+        [C.south] = {OX + STEP,      OY - 2 * STEP},
+    }
+
+    -- Center cell: non-interactive; shows room number + wall-line overlays.
+    local cCell = CreateFrame("Frame", nil, panel)
+    cCell:SetSize(CELL, CELL)
+    cCell:SetPoint("TOPLEFT", panel, "TOPLEFT", OX + STEP, OY - STEP)
+    local cBorder = cCell:CreateTexture(nil, "BACKGROUND", nil, -1)
+    cBorder:SetAllPoints(); cBorder:SetColorTexture(0.20, 0.20, 0.20, 1)
+    local cFill = cCell:CreateTexture(nil, "BACKGROUND")
+    cFill:SetAllPoints(); cFill:SetColorTexture(0.34, 0.34, 0.34, 1)
+    local cText = cCell:CreateFontString(nil, "OVERLAY")
+    cText:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+    cText:SetAllPoints()
+    maze.ref_center_text = cText
+
+    -- 2-px wall lines on the center cell edges, shown when the wall is set.
+    local WL = 2
+    maze.ref_wall_lines = {}
+    local lineSetup = {
+        [C.north] = function(t) t:SetSize(CELL, WL); t:SetPoint("TOPLEFT",    cCell, "TOPLEFT",    0, 0) end,
+        [C.south] = function(t) t:SetSize(CELL, WL); t:SetPoint("BOTTOMLEFT", cCell, "BOTTOMLEFT", 0, 0) end,
+        [C.east]  = function(t) t:SetSize(WL, CELL); t:SetPoint("TOPRIGHT",   cCell, "TOPRIGHT",   0, 0) end,
+        [C.west]  = function(t) t:SetSize(WL, CELL); t:SetPoint("TOPLEFT",    cCell, "TOPLEFT",    0, 0) end,
+    }
+    for d, setup in pairs(lineSetup) do
+        local wl = cCell:CreateTexture(nil, "OVERLAY")
+        wl:SetColorTexture(unpack(C.wallColor))
+        wl:Hide()
+        setup(wl)
+        maze.ref_wall_lines[d] = wl
+    end
+
+    -- Direction cells: clickable wall toggles; fill colour shows neighbour state.
+    maze.ref_btns = {}
+    for d, p in pairs(dirPos) do
+        local btn = CreateFrame("Button", nil, panel)
+        btn:SetSize(CELL, CELL)
+        btn:SetPoint("TOPLEFT", panel, "TOPLEFT", p[1], p[2])
+
+        local border = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
+        border:SetAllPoints(); border:SetColorTexture(0.15, 0.15, 0.15, 1)
+
+        local fill = btn:CreateTexture(nil, "BACKGROUND")
+        fill:SetAllPoints(); fill:SetColorTexture(0.10, 0.10, 0.10, 1)
+        btn.fillTex = fill
+
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.12)
+
+        local dd = d
+        btn:SetScript("OnClick", function()
+            local r = ns.Engine.GetCurrentRoom()
+            if r and r.button then ns.Engine.ToggleWall(r.button, dd) end
+        end)
+        tip(btn, "Toggle " .. C.direction_strings[d] .. " wall on current room")
+
+        maze.ref_btns[d] = btn
+    end
 end
 
 ------------------------------------------------------------
@@ -411,6 +509,32 @@ end
 ------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------
+function MapUI.UpdateWallButtons()
+    if not (ns.maze and ns.maze.ref_btns) then return end
+    local r = ns.Engine.GetCurrentRoom()
+
+    -- Center cell: room index text.
+    if ns.maze.ref_center_text then
+        ns.maze.ref_center_text:SetText(r and "|cffeeeeee" .. r.index .. "|r" or "")
+    end
+
+    -- Direction cells: fill = neighbour-exists state.
+    for d, btn in pairs(ns.maze.ref_btns) do
+        if r and r.neighbors[d] then
+            btn.fillTex:SetColorTexture(0.30, 0.30, 0.30, 1)   -- open passage
+        else
+            btn.fillTex:SetColorTexture(0.10, 0.10, 0.10, 1)   -- unexplored
+        end
+    end
+
+    -- Center cell edge lines: shown when the wall is set in that direction.
+    if ns.maze.ref_wall_lines then
+        for d, wl in pairs(ns.maze.ref_wall_lines) do
+            wl:SetShown(r ~= nil and r.walls[d] == true)
+        end
+    end
+end
+
 function MapUI.Initialize()
     if ns.maze then return end
 
@@ -426,6 +550,7 @@ function MapUI.Initialize()
 
     buildToolbar(maze, sf)
     buildCompass(maze, sf)
+    buildRoomReferencePanel(maze)
     buildMarkerPanel(maze)
     buildControls(maze)
     buildBottomBar(maze)

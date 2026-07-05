@@ -93,6 +93,23 @@ local function setSelectedBtn(btn, force)
 end
 
 ------------------------------------------------------------
+-- Highlights the edge zone currently under the cursor while hovering a cell.
+-- Attached as OnUpdate only for the hovered button (set on OnEnter, cleared on OnLeave).
+local function updateEdgeHover(self)
+    local cx, cy = GetCursorPosition()
+    local es = ns.maze:GetEffectiveScale()
+    cx, cy = cx / es, cy / es
+    local bl = self:GetLeft(); local br = self:GetRight()
+    local bt = self:GetTop();  local bb = self:GetBottom()
+    local hitDir
+    if     cx <= bl + C.borderW then hitDir = C.west
+    elseif cx >= br - C.borderW then hitDir = C.east
+    elseif cy >= bt - C.borderH then hitDir = C.north
+    elseif cy <= bb + C.borderH then hitDir = C.south
+    end
+    for d = 1, 4 do self.walls[d].hover:SetShown(d == hitDir) end
+end
+
 -- Cell factory (35x35 with edge-click wall toggle)
 ------------------------------------------------------------
 local function createCell()
@@ -120,6 +137,14 @@ local function createCell()
     skull:SetPoint("CENTER")
     skull:Hide()
     btn.skullTex = skull
+
+    -- Amber tint shown when this room shares a maze grid cell with another (cross/overlap).
+    local overlapTex = btn:CreateTexture(nil, "BACKGROUND", nil, 2)
+    overlapTex:SetSize(C.buttonW - 8, C.buttonH - 8)
+    overlapTex:SetColorTexture(unpack(C.cellColor.overlapOverlay))
+    overlapTex:SetPoint("CENTER")
+    overlapTex:Hide()
+    btn.overlapTex = overlapTex
 
     -- Paper-style walls: each blocked edge is drawn as a line spanning the cell
     -- side. Each edge holds one full-length solid bar plus a set of short dash
@@ -157,6 +182,19 @@ local function createCell()
             end
             edge.dashes[k] = d
         end
+
+        -- Hover highlight: covers the full edge hit-zone, shown while cursor is in that zone.
+        local h = btn:CreateTexture(nil, "OVERLAY", nil, 2)
+        h:SetColorTexture(unpack(C.wallHoverColor))
+        h:Hide()
+        edge.hover = h
+        local hw, hh = C.borderW, C.borderH
+        if     dir == C.north then h:SetSize(bw, hh); h:SetPoint("TOPLEFT",    btn, "TOPLEFT",    0, 0)
+        elseif dir == C.south then h:SetSize(bw, hh); h:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+        elseif dir == C.east  then h:SetSize(hw, bh); h:SetPoint("TOPRIGHT",   btn, "TOPRIGHT",   0, 0)
+        else                       h:SetSize(hw, bh); h:SetPoint("TOPLEFT",    btn, "TOPLEFT",    0, 0)
+        end
+
         btn.walls[dir] = edge
     end
 
@@ -180,6 +218,14 @@ local function createCell()
         end
     end)
 
+    btn:SetScript("OnEnter", function(self)
+        self:SetScript("OnUpdate", updateEdgeHover)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetScript("OnUpdate", nil)
+        for d = 1, 4 do self.walls[d].hover:Hide() end
+    end)
+
     return btn
 end
 
@@ -196,24 +242,18 @@ local function setRoomNumber(r)
     r.button.text:SetText("|cffeeeeee" .. r.index .. "|r")
 end
 
--- Draw each blocked edge as a paper-style line: solid for a normal room,
--- dashed for an overlapped / non-intersecting-cross room (r.isOverlap).
+-- Draw each blocked edge as a solid paper-style line. Cross/overlap rooms are
+-- distinguished by the amber overlapTex tint on the room background, not by
+-- dashed walls (dashes caused confusion with wall-marker aesthetics).
 local function renderRoomWalls(r)
     if not r.button then return end
     local edges = r.button.walls
     for dir = 1, 4 do
         local e = edges[dir]
-        if not r.walls[dir] then
-            e.solid:Hide()
-            for k = 1, #e.dashes do e.dashes[k]:Hide() end
-        elseif r.isOverlap then
-            e.solid:Hide()
-            for k = 1, #e.dashes do e.dashes[k]:Show() end
-        else
-            e.solid:Show()
-            for k = 1, #e.dashes do e.dashes[k]:Hide() end
-        end
+        e.solid:SetShown(r.walls[dir] == true)
+        for k = 1, #e.dashes do e.dashes[k]:Hide() end
     end
+    r.button.overlapTex:SetShown(r.isOverlap == true)
 end
 
 local function recolorRoom(r)
@@ -263,11 +303,14 @@ local function createButton(r)
     btn:SetFrameLevel(FL_BASE)
     btn.midTex:SetColorTexture(unpack(C.cellColor.default))
     btn.borderTex:SetColorTexture(unpack(C.cellColor.border))
+    btn.overlapTex:Hide()
     for i = 1, 4 do
         local e = btn.walls[i]
         e.solid:Hide()
+        e.hover:Hide()
         for k = 1, #e.dashes do e.dashes[k]:Hide() end
     end
+    btn:SetScript("OnUpdate", nil)
     btn.room = r
     btn:EnableMouse(true)
     btn:Show()
@@ -405,6 +448,7 @@ local function setCurrentRoom(r)
     setSelectedBtn(r.button, true)
 
     refreshMapViews()
+    if ns.MapUI then ns.MapUI.UpdateWallButtons() end
 end
 
 ------------------------------------------------------------
@@ -1088,6 +1132,7 @@ function Engine.ToggleWall(btn, dir)
     -- in refreshMapViews; just re-render the grid's wall lines (recolorRoom above
     -- already updated the canvas). Pass skipCompute so no grid BFS runs either.
     if ns.GridMap then ns.GridMap.Refresh(true) end
+    if ns.MapUI then ns.MapUI.UpdateWallButtons() end
 end
 
 function Engine.SetPOI(self)

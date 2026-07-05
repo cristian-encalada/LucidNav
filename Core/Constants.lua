@@ -68,7 +68,11 @@ ns.C = {
         trap          = {1.00, 0.50, 0.00, 1},
         trapBorder    = {0.75, 0.30, 0.00, 1},
         orphanBorder  = {0.80, 0.10, 0.10, 1},
+        -- Warm amber tint shown on rooms that share a maze grid cell (cross/overlap).
+        overlapOverlay = {0.85, 0.65, 0.15, 0.22},
     },
+    -- Semi-transparent highlight shown on the edge zone currently under the cursor.
+    wallHoverColor = {1, 1, 1, 0.35},
     -- Old save format container size (for backward-compat conversion)
     oldContainerW = 50000,
     oldButtonStep = 23,   -- old buttonW(18) + 5
