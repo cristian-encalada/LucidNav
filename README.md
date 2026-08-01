@@ -15,7 +15,7 @@ Instead of drawing the maze manually on paper, LucidNav **automatically builds a
 ## Features
 
 ### Mapping
-- **Live map canvas** — 35×35 rooms auto-built as you explore; right-click-drag to pan
+- **Live map canvas** — rooms (35×35px cells) auto-built as you explore; right-click-drag to pan
 - **Click-to-interact cells** — click the center of a room to select it; click an edge to toggle a wall
 - **Current-room reference panel** — a 5-cell cross at the top-right with **N/E/S/W buttons** to toggle the selected room's walls directly (no fiddly edge-clicking)
 - **Edge-hover highlight** — hovering a cell edge highlights exactly which wall you're about to toggle
@@ -138,6 +138,15 @@ Practical consequences:
 Tested with:
 
 - World of Warcraft **12.0.5 – Midnight**
+
+## Localization
+
+LucidNav automatically displays in your WoW client's language: **English**,
+**Spanish** (`esES`/`esMX`), **Portuguese** (`ptBR`), **German** (`deDE`), and
+**Simplified Chinese** (`zhCN`) are supported, with English as the fallback
+for any other locale. No settings needed — it's detected automatically.
+Translations are a first draft (not yet reviewed by native speakers) —
+corrections are welcome via GitHub issues or pull requests.
 
 ---
 
