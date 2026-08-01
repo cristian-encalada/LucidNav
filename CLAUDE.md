@@ -21,6 +21,8 @@ Read this before making changes.
 | File | Responsibility |
 |------|----------------|
 | `Core/Constants.lua` | `ns.C` — sizes, colors, direction tables, POI colors/textures, serialization constants. |
+| `Core/Utils.lua` | `ns.Print`/`PrintWarning`/`PrintDebug` (colored chat output), `ns.ColorText`, `ns.PoiName` — single source of truth for POI display names across locales. |
+| `Locales/*.lua` | `ns.L` — localized strings (enUS baseline; esES, ptBR, deDE, zhCN overrides). `Locales.lua` loads **last** among locale files to assemble `ns.L.DIR[1..4]`/`ns.L.COLOR[1..5]` from the scalar keys set by the active locale. |
 | `Core/Debug.lua` | `/ln debug` switch: live logging, periodic report, stats, map/wrap audits. |
 | `Core/RoomEngine.lua` | **The core.** Rooms graph, walls, POIs, trap, canvas buttons, movement tracking, navigation BFS, dedup, serialize/import, jump/overlap logic. Largest file. |
 | `Core/History.lua` | In-memory Undo stack (≤20 steps, lost on `/reload`). |
@@ -33,7 +35,7 @@ Read this before making changes.
 
 Namespace: every file starts `local addonName, ns = ...`. Shared state hangs off
 `ns` (`ns.Engine`, `ns.GridMap`, `ns.MapUI`, `ns.Checkpoints`, `ns.History`,
-`ns.Debug`, `ns.C`, `ns.maze`, `ns.container`, `ns.scrollframe`, `ns.playerNav`).
+`ns.Debug`, `ns.C`, `ns.L`, `ns.maze`, `ns.container`, `ns.scrollframe`, `ns.playerNav`).
 
 Slash: `/ln`, `/lnn`, `/lucid` (toggle UI). Sub-args: `debug`, `undo`, `save [name]`,
 `restore <name>`, `checkpoints`.
@@ -85,6 +87,11 @@ POI rendering: runes use `interface\icons\boss_odunrunes_<suffix>` where
   `onUpdate`, the grid only on refresh (per room change).
 - Movement tracking lives in `RoomEngine.lua`'s `onUpdate` via `UnitPosition` +
   `detectDir` thresholds. Coordinate labels are throttled to ~10/sec to avoid GC churn.
+- **User-facing strings go through `ns.L`** (see `Locales/`), not literals — the
+  client's locale selects enUS/esES/esMX/ptBR/deDE/zhCN automatically, English
+  fallback otherwise. POI names use `ns.PoiName()` (`Core/Utils.lua`) rather than
+  string-formatting inline, since esES/ptBR need fully-inflected per-color/type
+  names (gendered noun-adjective agreement) that a single `%s` template can't produce.
 
 ---
 

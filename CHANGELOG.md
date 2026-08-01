@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.0] - 2026-08-01
+
+### Added
+- **Localization.** LucidNav now displays in Spanish (`esES`/`esMX`), Portuguese
+  (`ptBR`), German (`deDE`), and Simplified Chinese (`zhCN`) — automatically
+  detected from your WoW client's language, with English as the fallback for
+  every other locale. Covers the full UI: dialogs, the Help text, tooltips,
+  button labels, the right-click menu, and chat/status messages (including
+  `/ln debug` output). Translations are a first draft without native-speaker
+  review yet — corrections welcome via GitHub issues/PRs.
+
+### Changed
+- Bumped `## Interface:` to add `120100` for the upcoming patch 12.1.0
+  (launching August 11).
+- Buttons and dialog labels now auto-widen to fit localized text instead of
+  using fixed pixel widths sized for English, so esES/deDE/ptBR labels no
+  longer spill past their button edges.
+- Shortened the wall-toggle tooltips (`Muro Este`, `Ostwand`, ...) and the
+  navigation "you'll arrive!" phrasing across all locales.
+- Navigation guidance no longer re-prints an identical chat line on every
+  room entry when the nearest target hasn't changed.
+- The jump-over confirmation dialog now opens anchored to the top of the
+  screen instead of dead-center, so it doesn't cover the map underneath, and
+  gained an opt-in "don't ask again this session" checkbox for late-game
+  maps where nearly every step re-enters known territory.
+- The in-game window/dialog titles always show "LucidNav" instead of a
+  translated flavor name, matching how addon title bars normally behave.
+- Corrected the Help dialog's maze-reset wording, which incorrectly implied
+  the reset is tied to the daily/weekly instance lockout.
+- Added per-locale `Title-*`/`Notes-*` fields to the `.toc` so the in-game
+  AddOn list and CurseForge/WowUp show a translated name for esES/esMX/
+  deDE/ptBR/zhCN clients.
+
+### Fixed
+- Several right-panel labels (`Current:`, `Selected:`, `X:`, `Y:`, `None`)
+  were missed by the localization pass and stayed hardcoded in English.
+
 ## [1.5.0] - 2026-07-05
 
 ### Added

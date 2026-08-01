@@ -1,8 +1,19 @@
-## Interface: 120000, 120001, 120005, 120007
+## Interface: 120000, 120001, 120005, 120007, 120100
 ## Title: LucidNav - Lucid Nightmare Maze Navigator
 ## Author: Cristian Encalada (Byob - The Scryers - US)
 ## Notes: Real-time navigator for the Endless Halls maze (Lucid Nightmare secret mount)
-## Version: 1.5.0
+## Version: 1.6.0
+
+## Title-esES: LucidNav - Navegador del Laberinto de Pesadilla Lúcida
+## Notes-esES: Navegador en tiempo real para el laberinto de los Pasillos Infinitos (montura secreta Pesadilla Lúcida)
+## Title-esMX: LucidNav - Navegador del Laberinto de Pesadilla Lúcida
+## Notes-esMX: Navegador en tiempo real para el laberinto de los Pasillos Infinitos (montura secreta Pesadilla Lúcida)
+## Title-deDE: LucidNav - Navigator für das Endless-Halls-Labyrinth
+## Notes-deDE: Echtzeit-Navigator für das Endless-Halls-Labyrinth (geheimes Lucid-Nightmare-Reittier)
+## Title-ptBR: LucidNav - Navegador do Labirinto Endless Halls
+## Notes-ptBR: Navegador em tempo real para o labirinto Endless Halls (montaria secreta Lucid Nightmare)
+## Title-zhCN: LucidNav - 清醒噩梦迷宫领航员
+## Notes-zhCN: Endless Halls 迷宫实时导航插件（清醒噩梦隐藏坐骑）
 ## IconTexture: Interface\Icons\Ability_Mount_NightmareHorse
 ## X-Category: Achievements
 ## DefaultState: Enabled
@@ -13,6 +24,12 @@
 
 Core\Constants.lua
 Core\Utils.lua
+Locales\enUS.lua
+Locales\esES.lua
+Locales\ptBR.lua
+Locales\deDE.lua
+Locales\zhCN.lua
+Locales\Locales.lua
 Core\Debug.lua
 Core\RoomEngine.lua
 Core\History.lua

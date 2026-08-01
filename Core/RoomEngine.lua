@@ -118,7 +118,7 @@ local function setSelectedBtn(btn, force)
         ns.maze.selMarker:Show()
     end
     local label = selected_btn and selected_btn.room.index or "None"
-    ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, tostring(label)))
+    ns.maze.selected_room_label:SetText(ns.L.LBL_SELECTED .. " " .. ns.ColorText(C.textColor.info, tostring(label)))
 end
 
 ------------------------------------------------------------
@@ -488,7 +488,7 @@ local function setCurrentRoom(r)
     ns.playerNav:SetPoint("CENTER", r.button, "CENTER")
     ns.playerNav.tex:SetRotation(math.rad(getRotation(last_dir or C.north)))
 
-    ns.maze.current_room_label:SetText("Current: " .. ns.ColorText(C.textColor.info, tostring(r.index)))
+    ns.maze.current_room_label:SetText(ns.L.LBL_CURRENT .. " " .. ns.ColorText(C.textColor.info, tostring(r.index)))
     setSelectedBtn(r.button, true)
 
     refreshMapViews()
@@ -549,7 +549,7 @@ local function addRoom(dir, forceJump)
 
     -- Snapshot before any mapping mutation so Undo reverts this single step.
     -- (forceJump comes from JumpOver, which already snapshotted "Jump over".)
-    if not forceJump and ns.History then ns.History.Snapshot("Map room") end
+    if not forceJump and ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_MAP_ROOM) end
 
     if not forceJump then
         local targetCX = cur.cx + dcx
@@ -558,6 +558,15 @@ local function addRoom(dir, forceJump)
             if v.cx == targetCX and v.cy == targetCY then
                 cur.neighbors[dir]                = v
                 v.neighbors[getOppositeDir(dir)] = cur
+                -- Late-game the map is mostly explored, so nearly every step
+                -- re-enters a known room and would otherwise interrupt with
+                -- the jump-over confirmation. The player opts into skipping
+                -- it via a checkbox on that dialog (ns.jumpAutoKeepLinked);
+                -- until they do, every loop-closure still gets confirmed.
+                if ns.jumpAutoKeepLinked then
+                    if ns.Debug then ns.Debug.Stat("keepLinked") end
+                    return v
+                end
                 pendingJump = {dir = dir, existing = v, prev = cur}
                 if ns.maze and ns.maze.jumpDialog then ns.maze.jumpDialog:Show() end
                 return v
@@ -593,7 +602,7 @@ local function eraseRooms()
     selected_btn = nil
     if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
     if ns.maze and ns.maze.selected_room_label then
-        ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
+        ns.maze.selected_room_label:SetText(ns.L.LBL_SELECTED .. " " .. ns.ColorText(C.textColor.info, ns.L.LBL_NONE))
     end
 end
 
@@ -657,11 +666,11 @@ end
 local function deDuplicateMap(orig, dupe)
     if orig == dupe then return end
     if (orig and orig.is_trap) or (dupe and dupe.is_trap) then
-        print("Skipping map deduplication: one of the rooms is the teleport trap room.")
+        print(ns.L.MSG_DEDUP_SKIPPED_TRAP)
         if ns.Debug then ns.Debug.Stat("dedupSkippedTrap") end
         return
     end
-    if ns.History then ns.History.Snapshot("Dedup") end
+    if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_DEDUP) end
 
     ----------------------------------------------------------
     -- Phase 1 — gather (walk in parallel, mutate nothing)
@@ -773,7 +782,7 @@ local function deDuplicateMap(orig, dupe)
         selected_btn = nil
         if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
         if ns.maze and ns.maze.selected_room_label then
-            ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
+            ns.maze.selected_room_label:SetText(ns.L.LBL_SELECTED .. " " .. ns.ColorText(C.textColor.info, ns.L.LBL_NONE))
         end
     end
 
@@ -786,36 +795,49 @@ end
 ------------------------------------------------------------
 -- Navigation guidance output
 ------------------------------------------------------------
+-- navigate() reruns on every room entry, so outputGuidance is called every
+-- step. Cache the last printed guidance and skip re-printing it verbatim --
+-- when the nearest unexplored target hasn't changed between two room
+-- entries, re-announcing the identical line is pure chat noise.
+local lastGuidanceMsg = nil
+
 local function outputGuidance(directions)
     local steps = #directions - 1
     local navString = ""
+    local stepsLine
     if navtarget == 11 then
         if steps ~= 1 then
-            print(string.format("I have detected an unexplored room %d steps from here!", steps))
+            stepsLine = string.format(ns.L.MSG_UNEXPLORED_STEPS, steps)
         else
-            navString = "Unexplored room: "
+            navString = ns.L.LBL_UNEXPLORED_ROOM_PREFIX
         end
     else
         if steps ~= 1 then
             local destStr = navtarget > 0 and ns.PoiName(navtarget) or ""
-            print(string.format("I have detected your destination (%s) %d steps from here!", destStr, steps))
+            stepsLine = string.format(ns.L.MSG_DESTINATION_STEPS, destStr, steps)
         end
     end
     for i = 2, 4 do
         if directions[i] == nil then
-            navString = navString .. "You will have arrived at your destination!"
+            navString = navString .. ns.L.MSG_ARRIVED
             break
         end
-        navString = navString .. "Go " .. C.direction_strings[directions[i]] .. ", then "
+        navString = navString .. string.format(ns.L.MSG_GO_DIRECTION_THEN, ns.L.DIR[directions[i]])
         if i == 4 then navString = navString .. "..." end
     end
+
+    local fullMsg = (stepsLine and (stepsLine .. "\n") or "") .. navString
+    if fullMsg == lastGuidanceMsg then return end
+    lastGuidanceMsg = fullMsg
+
+    if stepsLine then print(stepsLine) end
     print(navString)
 end
 
 local function outputGuidanceToEHH(directions, POIs, targetRoom, startingRoom)
     local dirLetters = {"N","E","S","W"}
     if targetRoom.poi_index == 11 then
-        print("Error, EHH does not care about unexplored rooms"); return
+        print(ns.L.MSG_EHH_NO_UNEXPLORED); return
     end
     local navString = "" .. C.EHHPOIStrings[startingRoom.poi_index]
     for i = 2, #directions do
@@ -861,7 +883,7 @@ local function navigateToTarget(targetRoom, startingRoom)
             end
         end
     end
-    print("No route from current room to target found, keep wandering until you hit a known POI so you can reattach to the rest of the map")
+    print(ns.L.MSG_NO_ROUTE)
     if ns.Debug then ns.Debug.Stat("navNoRoute") end
 end
 
@@ -887,13 +909,13 @@ local function navigateToUnexplored()
             end
         end
     end
-    print("Hmm, that's odd, according to this you have no unexplored territory..")
+    print(ns.L.MSG_NO_UNEXPLORED)
 end
 
 local function navigate()
     if navtarget == 12 then
         if trapRoom ~= nil then navigateToTarget(trapRoom, current_room)
-        else print("Teleport trap has not been identified yet.") end
+        else print(ns.L.MSG_TRAP_NOT_IDENTIFIED) end
     elseif navtarget ~= 11 then
         navigateToTarget(poirooms[navtarget], current_room)
     else
@@ -975,7 +997,7 @@ function Engine.ImportMap(t)
             local ni = v.neighbor_indices[nb]
             if ni ~= nil then
                 if rooms[ni] == nil then
-                    print(string.format("Error: room %d references missing room %d", v.index, ni))
+                    print(string.format(ns.L.MSG_ROOM_MISSING_NEIGHBOR, v.index, ni))
                 else
                     v.neighbors[nb] = rooms[ni]
                 end
@@ -1035,7 +1057,7 @@ local function exportEHH()
     local foundPOIs = {}
     for i = 1,10 do if poirooms[i] ~= nil then foundPOIs[#foundPOIs+1]=i end end
     if #foundPOIs < 2 then
-        print("Error: need at least 2 POIs marked to export to EndlessHallsHelper")
+        print(ns.L.MSG_EHH_NEED_2_POIS)
         Exporting_To_EHH = false; return
     end
     for i = 1, #foundPOIs-1 do
@@ -1043,7 +1065,7 @@ local function exportEHH()
             navigateToTarget(poirooms[foundPOIs[j]], poirooms[foundPOIs[i]])
         end
     end
-    print("Routes exported. CTRL+A, CTRL+C to copy, then paste at nightswimmer.github.io/EndlessHalls")
+    print(ns.L.MSG_EHH_EXPORTED)
     if ns.eb then ns.eb:SetText(EHH_Directions) end
     Exporting_To_EHH = false
 end
@@ -1071,9 +1093,7 @@ local function setPOIClick(self)
     if poirooms[self.poi_index] == target then return end
 
     if poirooms[self.poi_index] ~= nil and poi_warned ~= self.poi_index then
-        print(string.format(
-            "WOAH WOAH WOAH, this point of interest was already defined as room %d! Click again to confirm a loop in the map and de-duplicate nodes",
-            poirooms[self.poi_index].index))
+        print(string.format(ns.L.MSG_POI_ALREADY_DEFINED, poirooms[self.poi_index].index))
         poi_warned = self.poi_index
         if ns.Debug then ns.Debug.Stat("poiConflicts") end
         return
@@ -1095,7 +1115,7 @@ local function setPOIClick(self)
     local found = 0
     for i=1,10 do if poirooms[i] ~= nil then found=found+1 end end
     if found == 10 then
-        print("|cff00ff00All 5 runes and 5 orbs have been marked!|r You can now start matching orbs to runes.")
+        print(ns.L.MSG_ALL_POIS_MARKED)
     end
     Engine.UpdatePOIButtonText()
     if ns.GridMap then ns.GridMap.Refresh() end
@@ -1129,11 +1149,11 @@ local function onUpdate(self, elapsed)
         local fx, fy = math.floor(x), math.floor(y)
         if fx ~= lastShownX then
             lastShownX = fx
-            ns.maze.x_label:SetText("X: " .. ns.ColorText(C.textColor.info, tostring(fx)))
+            ns.maze.x_label:SetText(ns.L.LBL_X .. " " .. ns.ColorText(C.textColor.info, tostring(fx)))
         end
         if fy ~= lastShownY then
             lastShownY = fy
-            ns.maze.y_label:SetText("Y: " .. ns.ColorText(C.textColor.info, tostring(fy)))
+            ns.maze.y_label:SetText(ns.L.LBL_Y .. " " .. ns.ColorText(C.textColor.info, tostring(fy)))
         end
     end
 
@@ -1163,7 +1183,7 @@ end
 function Engine.LoadSavedMap()
     if LucidNavDB and LucidNavDB.mapData then
         local saved = LucidNavDB.last_saved or "unknown time"
-        ns.Print(string.format("Found a saved map from %s. Loading it...", saved))
+        ns.Print(string.format(ns.L.MSG_FOUND_SAVED_MAP, saved))
         Engine.ImportMap(LucidNavDB.mapData)
         -- ImportMap already restored the saved current room (matches the player's
         -- physical position after a /reload). Only snap to the entrance on an
@@ -1178,21 +1198,21 @@ function Engine.LoadSavedMap()
         end
     else
         resetMap()
-        print("No saved map found. Starting fresh.")
+        print(ns.L.MSG_NO_SAVED_MAP)
     end
-    print("Right-click drag to pan the map. Click a room center to select it. Click an edge to toggle a wall.")
+    print(ns.L.MSG_STARTUP_TIP)
 end
 
 function Engine.ResetMap()
     -- Snapshot the pre-wipe map so a full reset stays undoable.
-    if ns.History then ns.History.Snapshot("Reset") end
+    if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_RESET) end
     -- Wipe saved map data but preserve the debug preference across a New Map.
     local keepDebug = LucidNavDB and LucidNavDB.debug
     LucidNavDB = { debug = keepDebug }
     resetMap()
     -- Fresh map => fresh session stats so counts reflect only the new run.
     if ns.Debug then ns.Debug.ResetStats() end
-    print("Map cleared. Starting fresh.")
+    print(ns.L.MSG_MAP_CLEARED)
 end
 
 function Engine.SetCurrentRoom(room)
@@ -1233,13 +1253,13 @@ function Engine.SetGuidance(self)
     end
     if self.target == 12 then
         if trapRoom == nil then
-            print("Teleport trap has not been identified yet."); return
+            print(ns.L.MSG_TRAP_NOT_IDENTIFIED); return
         end
         navtarget = 12
         Engine.UpdateNavButtonText(); navigate(); return
     end
     if poirooms[self.target] == nil then
-        print("That target has not been discovered yet. Navigating to the nearest unexplored territory")
+        print(ns.L.MSG_TARGET_NOT_DISCOVERED)
         navtarget = 11
     else
         navtarget = self.target
@@ -1249,18 +1269,18 @@ end
 
 function Engine.HitTheTrap()
     if not last_dir then
-        print("Cannot process trap: no movement recorded yet. Walk somewhere first."); return
+        print(ns.L.MSG_TRAP_NO_MOVEMENT); return
     end
     -- last_dir is only ever set once movement tracking has a current room.
     local cur = current_room
     if not cur then return end
-    if ns.History then ns.History.Snapshot("Trap") end
+    if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_TRAP) end
     if ns.Debug then ns.Debug.Stat("trapsMarked") end
     local prevRoom = cur.neighbors[getOppositeDir(last_dir)]
     if prevRoom then
         cur.is_trap = true; trapRoom = cur
         recolorRoom(cur)
-        print(string.format("Room %d marked as the teleport trap room (orange on map).", cur.index))
+        print(string.format(ns.L.MSG_TRAP_MARKED, cur.index))
         -- Wall the passage on BOTH sides but KEEP the neighbor links. Keeping the
         -- trap connected to its entrance lets the Grid Map place it via BFS; a
         -- disconnected trap falls back to imprecise cx/cy placement and visually
@@ -1268,10 +1288,10 @@ function Engine.HitTheTrap()
         -- through it, and a re-entry is recognised rather than duplicated.
         prevRoom.walls[last_dir]  = true
         cur.walls[getOppositeDir(last_dir)] = true
-        print(string.format("Room %d's %s exit walled off.", prevRoom.index, C.direction_strings[last_dir]))
+        print(string.format(ns.L.MSG_TRAP_EXIT_WALLED, prevRoom.index, ns.L.DIR[last_dir]))
         recolorRoom(prevRoom)
     else
-        print("Warning: could not identify the trap room entrance. Creating new room for current position.")
+        print(ns.L.MSG_TRAP_ENTRANCE_UNKNOWN)
     end
     local r = newRoom()
     local oX, oY = getRoomJumpOffset(cur.cx, cur.cy, 0, 1)
@@ -1286,9 +1306,9 @@ function Engine.DumpMap()
 end
 function Engine.ImportMapFromEditbox()
     if not ns.eb then return end
-    print("WARNING! You must load the map from the same room as you were when you saved the map")
+    print(ns.L.MSG_LOAD_SAME_ROOM_WARNING)
     local t = ns.eb:GetText()
-    print("Loading this map:"); print(t)
+    print(ns.L.MSG_LOADING_MAP); print(t)
     Engine.ImportMap(t)
 end
 
@@ -1323,7 +1343,7 @@ end
 
 function Engine.ClearTrap(room)
     if not room or not room.is_trap then return end
-    if ns.History then ns.History.Snapshot("Clear trap") end
+    if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_CLEAR_TRAP) end
     room.is_trap = false
     if trapRoom == room then trapRoom = nil end
     recolorRoom(room)
@@ -1336,16 +1356,16 @@ function Engine.DeleteRoom(room)
     -- Room 1 is the maze entrance: it anchors the Grid Map layout and the
     -- respawn-to-entrance logic, so it must never be deleted.
     if room == rooms[1] then
-        ns.PrintWarning("Cannot delete the entrance room (Room 1).")
+        ns.PrintWarning(ns.L.MSG_CANNOT_DELETE_ENTRANCE)
         return
     end
     local total = 0
     for _ in pairs(rooms) do total = total + 1 end
     if total <= 1 then
-        ns.PrintWarning("Cannot delete the only room on the map.")
+        ns.PrintWarning(ns.L.MSG_CANNOT_DELETE_ONLY_ROOM)
         return
     end
-    if ns.History then ns.History.Snapshot("Delete room") end
+    if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_DELETE_ROOM) end
     if ns.Debug then ns.Debug.Stat("roomsDeleted") end
 
     -- Pick a replacement current room (prefer a neighbor) before severing links.
@@ -1380,7 +1400,7 @@ function Engine.DeleteRoom(room)
         selected_btn = nil
         if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
         if ns.maze and ns.maze.selected_room_label then
-            ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
+            ns.maze.selected_room_label:SetText(ns.L.LBL_SELECTED .. " " .. ns.ColorText(C.textColor.info, ns.L.LBL_NONE))
         end
     end
 
@@ -1464,7 +1484,7 @@ function Engine.AuditMap()
         local linked = false
         for dir = 1, 4 do if r.neighbors[dir] then linked = true; break end end
         if not linked and r ~= current_room then
-            add("Room %d is orphaned (no neighbors).", r.index)
+            add(ns.L.AUDIT_ORPHANED, r.index)
         end
 
         for dir = 1, 4 do
@@ -1472,18 +1492,18 @@ function Engine.AuditMap()
             if n then
                 -- Dangling pointer to a room no longer in the map
                 if rooms[n.index] ~= n then
-                    add("Room %d -> %s points at a room not in the map.",
-                        r.index, C.direction_strings[dir])
+                    add(ns.L.AUDIT_DANGLING_NEIGHBOR,
+                        r.index, ns.L.DIR[dir])
                 else
                     -- Asymmetric link: A->B but B does not point back A
                     if n.neighbors[getOppositeDir(dir)] ~= r then
-                        add("Asymmetric link: room %d %s -> room %d, but no back-link.",
-                            r.index, C.direction_strings[dir], n.index)
+                        add(ns.L.AUDIT_ASYMMETRIC_LINK,
+                            r.index, ns.L.DIR[dir], n.index)
                     end
                     -- Wall mismatch: one side walled, the other open
                     if r.walls[dir] ~= n.walls[getOppositeDir(dir)] then
-                        add("Wall mismatch between rooms %d and %d (%s edge).",
-                            r.index, n.index, C.direction_strings[dir])
+                        add(ns.L.AUDIT_WALL_MISMATCH,
+                            r.index, n.index, ns.L.DIR[dir])
                     end
                 end
             end
@@ -1493,7 +1513,7 @@ function Engine.AuditMap()
     -- Canvas overlaps (two rooms drawn on the exact same cell)
     for pk, list in pairs(byPos) do
         if #list > 1 then
-            add("Canvas overlap at cell %s: rooms %s.", pk, table.concat(list, ", "))
+            add(ns.L.AUDIT_CANVAS_OVERLAP, pk, table.concat(list, ", "))
         end
     end
 
@@ -1555,13 +1575,13 @@ function Engine.UpdateNavButtonText()
             local name = ns.PoiName(i)
             text = ns.ColorText(C.textColor.matched, "v") .. " |cff" .. C.textColor.unmatched .. name
             if steps and steps > 0 then text = text .. " (" .. steps .. ")"
-            elseif steps == 0 then text = text .. " (here)" end
+            elseif steps == 0 then text = text .. " " .. ns.L.LBL_HERE end
             text = text .. "|r"
         else
             if i == 11 then
-                text = "Unexplored Territory"
+                text = ns.L.LBL_UNEXPLORED_TERRITORY
             elseif i == 12 then
-                text = "Teleport Trap"
+                text = ns.L.LBL_TELEPORT_TRAP
             else
                 text = ns.PoiName(i, true)
             end
@@ -1569,7 +1589,7 @@ function Engine.UpdateNavButtonText()
                 if steps ~= nil and steps > 0 then
                     text = text .. " |cffaaaaaa(" .. steps .. ")|r"
                 elseif steps == 0 then
-                    text = text .. " " .. ns.ColorText(C.textColor.info, "(here)")
+                    text = text .. " " .. ns.ColorText(C.textColor.info, ns.L.LBL_HERE)
                 end
             end
         end
@@ -1587,7 +1607,7 @@ function Engine.UpdateNavButtonText()
                 local reachable = (dist[room] ~= nil)
                 if poiReachable[i] and not reachable then
                     ns.PrintWarning(string.format(
-                        "%s (room %d) is no longer reachable from here — you may have walled it off.",
+                        ns.L.MSG_POI_UNREACHABLE,
                         ns.PoiName(i, true), room.index))
                     if ns.Debug then ns.Debug.Stat("poiUnreachableWarn") end
                 end

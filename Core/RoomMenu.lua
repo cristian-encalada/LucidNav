@@ -7,13 +7,14 @@ local RoomMenu = ns.RoomMenu
 ------------------------------------------------------------
 -- Menu item labels, defined once and shared by both the modern (MenuUtil)
 -- and legacy (EasyMenu) code paths below instead of being hardcoded twice.
+-- Locales/*.lua load before this file, so ns.L is already populated here.
 ------------------------------------------------------------
-local LABEL_SET_CURRENT = "Set as current room"
-local LABEL_UNLINK      = "Unlink neighbor"
-local LABEL_DETACH      = "Detach (unlink all neighbors)"
-local LABEL_CLEAR_TRAP  = "Clear trap"
-local LABEL_UNDO        = "Undo last action"
-local LABEL_DELETE      = "Delete room"
+local LABEL_SET_CURRENT = ns.L.MENU_SET_CURRENT
+local LABEL_UNLINK      = ns.L.MENU_UNLINK
+local LABEL_DETACH      = ns.L.MENU_DETACH
+local LABEL_CLEAR_TRAP  = ns.L.MENU_CLEAR_TRAP
+local LABEL_UNDO        = ns.L.MENU_UNDO
+local LABEL_DELETE      = ns.L.MENU_DELETE
 
 ------------------------------------------------------------
 -- Helper: does this room have at least one neighbor?
@@ -30,7 +31,7 @@ end
 ------------------------------------------------------------
 local function showModern(room)
     MenuUtil.CreateContextMenu(UIParent, function(owner, root)
-        root:CreateTitle("Room " .. room.index)
+        root:CreateTitle(string.format(ns.L.MENU_ROOM_TITLE, room.index))
 
         root:CreateButton(LABEL_SET_CURRENT, function()
             ns.Engine.SetCurrentRoom(room)
@@ -44,7 +45,7 @@ local function showModern(room)
             local unlink = root:CreateButton(LABEL_UNLINK)
             for i = 1, 4 do
                 if room.neighbors[i] then
-                    local dir, dirName = i, C.direction_strings[i]
+                    local dir, dirName = i, ns.L.DIR[i]
                     unlink:CreateButton(dirName, function()
                         if ns.History then ns.History.Snapshot(ns.History.LabelUnlink(dirName)) end
                         ns.Engine.UnlinkNeighbor(room, dir)
@@ -53,7 +54,7 @@ local function showModern(room)
             end
 
             root:CreateButton(LABEL_DETACH, function()
-                if ns.History then ns.History.Snapshot("Detach") end
+                if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_DETACH) end
                 ns.Engine.DetachRoom(room)
             end)
         end
@@ -86,7 +87,7 @@ local function showLegacy(room)
         CreateFrame("Frame", "LucidNavRoomMenu", UIParent, "UIDropDownMenuTemplate")
 
     local menu = {
-        { text = "Room " .. room.index, isTitle = true, notCheckable = true },
+        { text = string.format(ns.L.MENU_ROOM_TITLE, room.index), isTitle = true, notCheckable = true },
         {
             text = LABEL_SET_CURRENT, notCheckable = true,
             func = function() ns.Engine.SetCurrentRoom(room) end,
@@ -97,7 +98,7 @@ local function showLegacy(room)
         local sub = {}
         for i = 1, 4 do
             if room.neighbors[i] then
-                local dir, dirName = i, C.direction_strings[i]
+                local dir, dirName = i, ns.L.DIR[i]
                 sub[#sub+1] = {
                     text = dirName, notCheckable = true,
                     func = function()
@@ -111,7 +112,7 @@ local function showLegacy(room)
         menu[#menu+1] = {
             text = LABEL_DETACH, notCheckable = true,
             func = function()
-                if ns.History then ns.History.Snapshot("Detach") end
+                if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_DETACH) end
                 ns.Engine.DetachRoom(room)
             end,
         }
@@ -148,6 +149,6 @@ function RoomMenu.Show(room)
     elseif type(EasyMenu) == "function" then
         showLegacy(room)
     else
-        ns.Print("Context menu API unavailable on this client.")
+        ns.Print(ns.L.MSG_MENU_UNAVAILABLE)
     end
 end

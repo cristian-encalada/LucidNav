@@ -3,6 +3,17 @@ local addonName, ns = ...
 ns.Dialogs = ns.Dialogs or {}
 local Dialogs = ns.Dialogs
 
+local function hideTooltip() GameTooltip:Hide() end
+local function tip(btn, text)
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(text)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", hideTooltip)
+end
+
 local DIALOG_BACKDROP = {
     bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -33,10 +44,10 @@ local function makeTitle(dlg, text)
     t:SetText(text)
 end
 
-local function makeBody(dlg, text, justifyH, justifyV)
+local function makeBody(dlg, text, justifyH, justifyV, bottomOffset)
     local f = dlg:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     f:SetPoint("TOPLEFT",     dlg, "TOPLEFT",     16, -40)
-    f:SetPoint("BOTTOMRIGHT", dlg, "BOTTOMRIGHT", -16,  42)
+    f:SetPoint("BOTTOMRIGHT", dlg, "BOTTOMRIGHT", -16,  bottomOffset or 42)
     f:SetWordWrap(true)
     f:SetText(text)
     if justifyH then f:SetJustifyH(justifyH) end
@@ -44,10 +55,19 @@ local function makeBody(dlg, text, justifyH, justifyV)
     return f
 end
 
+-- Localized button labels (esES/deDE/ptBR) commonly run longer than the
+-- English text these pixel widths were sized for, so widen the button to
+-- fit its label rather than let the text spill past the button edges.
 local function makeDialogButton(parent, text, w, h)
     local btn = CreateFrame("Button", nil, parent, "GameMenuButtonTemplate")
-    btn:SetSize(w or 120, h or 22)
+    local minW = w or 120
+    btn:SetSize(minW, h or 22)
     btn:SetText(text)
+    local fs = btn:GetFontString()
+    if fs then
+        local tw = fs:GetStringWidth() + 16
+        if tw > minW then btn:SetWidth(tw) end
+    end
     return btn
 end
 
@@ -75,17 +95,37 @@ end
 -- Jump dialog
 ------------------------------------------------------------
 local function buildJumpDialog(mazeFrame)
-    local dlg = makeDialog(addonName.."JumpDialog", mazeFrame, 330, 160)
-    makeTitle(dlg, "Lucid Nightmare Navigator")
+    local dlg = makeDialog(addonName.."JumpDialog", mazeFrame, 330, 184)
+    -- This one fires far more often than the other dialogs (once per
+    -- loop-closure, which is most steps late-game), so unlike Reset/Help it
+    -- doesn't get screen-center: that would blank out the map underneath
+    -- right when the player wants to see the room they just walked into.
+    -- Anchored to the top instead, clear of the map window below it.
+    dlg:ClearAllPoints()
+    dlg:SetPoint("TOP", UIParent, "TOP", 0, -60)
+    makeTitle(dlg, addonName)
 
-    makeBody(dlg,
-        "You have encountered an existing room on the map.\nIs this the same room you expected to enter?",
-        "CENTER", "MIDDLE")
+    makeBody(dlg, ns.L.DLG_JUMP_BODY, "CENTER", "MIDDLE", 66)
 
-    makeConfirmButtons(dlg, "Yes, keep it linked", 130, "No, jump over", 110,
+    -- Late-game, nearly every step re-enters already-mapped territory, so
+    -- this dialog can fire on almost every move. Letting the player opt in
+    -- to skipping it (instead of the addon silently guessing) keeps that
+    -- flow uninterrupted without risking a wrong auto-link corrupting the
+    -- map -- "No, jump over" is still reachable by unchecking this.
+    local cb = CreateFrame("CheckButton", nil, dlg, "UICheckButtonTemplate")
+    cb:SetSize(20, 20)
+    cb:SetPoint("BOTTOM", dlg, "BOTTOM", -70, 40)
+    cb:SetChecked(false)
+    cb:SetScript("OnClick", function(self) ns.jumpAutoKeepLinked = (self:GetChecked() == true) end)
+    local cbLabel = dlg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    cbLabel:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+    cbLabel:SetText(ns.L.CHK_AUTO_KEEP_LINKED)
+    tip(cb, ns.L.TIP_AUTO_KEEP_LINKED)
+
+    makeConfirmButtons(dlg, ns.L.DLG_JUMP_YES, 130, ns.L.DLG_JUMP_NO, 110,
         function() ns.Engine.KeepLinked() end,
         function()
-            if ns.History then ns.History.Snapshot("Jump over") end
+            if ns.History then ns.History.Snapshot(ns.L.MSG_LABEL_JUMP_OVER) end
             ns.Engine.JumpOver()
         end)
 
@@ -97,12 +137,11 @@ end
 ------------------------------------------------------------
 local function buildResetDialog(mazeFrame)
     local dlg = makeDialog(addonName.."ResetDialog", mazeFrame, 300, 150)
-    makeTitle(dlg, "Erase Map?")
+    makeTitle(dlg, ns.L.DLG_RESET_TITLE)
 
-    makeBody(dlg, "This will permanently erase your entire map.\nAre you sure?",
-        "CENTER", "MIDDLE")
+    makeBody(dlg, ns.L.DLG_RESET_BODY, "CENTER", "MIDDLE")
 
-    makeConfirmButtons(dlg, "Yes, erase it", 110, "Cancel", 80,
+    makeConfirmButtons(dlg, ns.L.DLG_RESET_YES, 110, ns.L.DLG_RESET_NO, 80,
         function() ns.Engine.ResetMap() end)
 
     mazeFrame.resetDialog = dlg
@@ -113,25 +152,19 @@ end
 ------------------------------------------------------------
 local function buildHelpDialog(mazeFrame)
     local dlg = makeDialog(addonName.."HelpDialog", mazeFrame, 500, 410)
-    makeTitle(dlg, "Lucid Nightmare Navigator — Help")
+    makeTitle(dlg, addonName .. " " .. ns.L.DLG_HELP_TITLE)
 
     makeBody(dlg,
-        "|cffffff00How do I navigate the map?|r\n" ..
-        "|cffeeeeffRight-click drag anywhere on the map to pan the view.|r\n\n" ..
-        "|cffffff00How do I mark walls and points of interest?|r\n" ..
-        "|cffeeeeffClick the CENTER of a room to select it (a ring appears).\n" ..
-        "Click an EDGE of a room to toggle that wall.\n" ..
-        "Click a colored Rune/Orb button on the right panel to mark the selected (or current) room as that POI.|r\n\n" ..
-        "|cffffff00How do I mark the teleport trap?|r\n" ..
-        "|cffeeeeffWhen you get ported, immediately click 'I got ported!'. The trap room turns orange.|r\n\n" ..
-        "|cffffff00What happens after a logout or crash?|r\n" ..
-        "|cffeeeeffProper logout (20-second timer): you respawn at Room 1. The addon resets your position automatically.\n" ..
-        "Force-close / crash / DC: you return to your last room in the maze. Walk back to a known room and use 'Set Player Loc' to correct your position.\n" ..
-        "The maze resets every daily reset — finish before the server reset!|r\n\n" ..
-        "|cffffff00Tips for solving the maze|r\n" ..
-        "|cffeeeeff• Do NOT extinguish runes early — they are essential navigation landmarks.\n" ..
-        "• Use navigation to reach unexplored rooms first.\n" ..
-        "• The teleport trap is marked in orange — navigation avoids routing through it.|r",
+        "|cffffff00" .. ns.L.DLG_HELP_H_NAVIGATE .. "|r\n" ..
+        "|cffeeeeff" .. ns.L.DLG_HELP_B_NAVIGATE .. "|r\n\n" ..
+        "|cffffff00" .. ns.L.DLG_HELP_H_MARKING .. "|r\n" ..
+        "|cffeeeeff" .. ns.L.DLG_HELP_B_MARKING .. "|r\n\n" ..
+        "|cffffff00" .. ns.L.DLG_HELP_H_TRAP .. "|r\n" ..
+        "|cffeeeeff" .. ns.L.DLG_HELP_B_TRAP .. "|r\n\n" ..
+        "|cffffff00" .. ns.L.DLG_HELP_H_LOGOUT .. "|r\n" ..
+        "|cffeeeeff" .. ns.L.DLG_HELP_B_LOGOUT .. "|r\n\n" ..
+        "|cffffff00" .. ns.L.DLG_HELP_H_TIPS .. "|r\n" ..
+        "|cffeeeeff" .. ns.L.DLG_HELP_B_TIPS .. "|r",
         "LEFT", "TOP"
     )
 

@@ -33,7 +33,10 @@ local function buildFrame()
     maze:SetScript("OnDragStop",  maze.StopMovingOrSizing)
 
     if maze.TitleText then
-        maze.TitleText:SetText("Lucid Nightmare Navigator")
+        -- Window chrome keeps the addon's actual name in every locale (like
+        -- any addon's title bar) rather than a translated flavor name --
+        -- only in-window/body text uses the localized name.
+        maze.TitleText:SetText(addonName)
     end
     if maze.CloseButton then
         maze.CloseButton:SetScript("OnClick", function() maze:Hide() end)
@@ -43,19 +46,19 @@ local function buildFrame()
 
     maze.current_room_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.current_room_label:SetPoint("TOPLEFT", maze, "TOPLEFT", 60, -35)
-    maze.current_room_label:SetText("Current: " .. ns.ColorText(C.textColor.info, "—"))
+    maze.current_room_label:SetText(ns.L.LBL_CURRENT .. " " .. ns.ColorText(C.textColor.info, "—"))
 
     maze.selected_room_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.selected_room_label:SetPoint("LEFT", maze.current_room_label, "RIGHT", 20, 0)
-    maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
+    maze.selected_room_label:SetText(ns.L.LBL_SELECTED .. " " .. ns.ColorText(C.textColor.info, ns.L.LBL_NONE))
 
     maze.x_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.x_label:SetPoint("LEFT", maze.selected_room_label, "RIGHT", 20, 0)
-    maze.x_label:SetText("X: " .. ns.ColorText(C.textColor.info, "—"))
+    maze.x_label:SetText(ns.L.LBL_X .. " " .. ns.ColorText(C.textColor.info, "—"))
 
     maze.y_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.y_label:SetPoint("LEFT", maze.x_label, "RIGHT", 10, 0)
-    maze.y_label:SetText("Y: " .. ns.ColorText(C.textColor.info, "—"))
+    maze.y_label:SetText(ns.L.LBL_Y .. " " .. ns.ColorText(C.textColor.info, "—"))
 
     return maze
 end
@@ -132,28 +135,28 @@ local function buildToolbar(maze, sf)
 
     local centerBtn = makeIconBtn(
         sf, "interface\\cursor\\crosshairs", 22,
-        "Center camera on current room",
+        ns.L.TIP_CENTER_CAMERA,
         function() ns.Engine.CenterCamera() end
     )
     centerBtn:SetPoint("TOPRIGHT", sf, "TOPRIGHT", -3, -3)
 
     local resetBtn = makeIconBtn(
         sf, "interface\\common\\voicechat-muted", 22,
-        "Erase map and start over",
+        ns.L.TIP_ERASE_MAP,
         function() if ns.maze.resetDialog then ns.maze.resetDialog:Show() end end
     )
     resetBtn:SetPoint("RIGHT", centerBtn, "LEFT", -4, 0)
 
     local helpBtn = makeIconBtn(
         sf, "interface\\friendsframe\\informationicon", 22,
-        "Help — how to use the addon",
+        ns.L.TIP_HELP,
         function() if ns.maze.helpDialog then ns.maze.helpDialog:Show() end end
     )
     helpBtn:SetPoint("RIGHT", resetBtn, "LEFT", -4, 0)
 
     local undoBtn = makeIconBtn(
         sf, "interface\\buttons\\ui-rotationleft-button-up", 22,
-        "Undo last action",
+        ns.L.TIP_UNDO,
         function() if ns.History then ns.History.Undo() end end
     )
     undoBtn:SetPoint("RIGHT", helpBtn, "LEFT", -4, 0)
@@ -171,7 +174,7 @@ local function buildMarkerPanel(maze)
 
     local title = panel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     title:SetPoint("TOP", panel, "TOP", 0, -4)
-    title:SetText("Markers")
+    title:SetText(ns.L.LBL_MARKERS)
     title:SetTextColor(0.8, 0.8, 0.8, 1)
 
     -- poi_buttons[1..5]  = rune icon textures (for tinting)
@@ -216,7 +219,7 @@ local function buildMarkerPanel(maze)
         -- Color label anchored to the right of the orb button
         local lbl = panel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         lbl:SetPoint("LEFT", orb, "RIGHT", 6, 0)
-        lbl:SetText("|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. "|r")
+        lbl:SetText(ns.ColorText(C.poi_hex_colors[i], ns.L.COLOR[i]))
         lbl:SetJustifyH("LEFT")
 
         -- Match toggle: small button on the right edge of the row
@@ -229,7 +232,7 @@ local function buildMarkerPanel(maze)
         matchBtn:SetText(ns.ColorText(C.textColor.unmatched, "o"))
         matchBtn.colorIdx = i
         matchBtn:SetScript("OnClick", function(self) ns.Engine.ToggleMatched(self.colorIdx) end)
-        tip(matchBtn, "Mark " .. C.color_strings[i] .. " pair as matched/unmatched")
+        tip(matchBtn, string.format(ns.L.TIP_TOGGLE_MATCH, ns.L.COLOR[i]))
         maze.match_buttons[i] = matchBtn
     end
 
@@ -237,15 +240,15 @@ local function buildMarkerPanel(maze)
     local clearBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     clearBtn:SetSize(68, 20)
     clearBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 2)  -- gap tightened from -4
-    clearBtn:SetText("Clear")
+    clearBtn:SetText(ns.L.BTN_CLEAR)
     clearBtn.poi_index = nil; clearBtn.t = nil; clearBtn.c = nil
     clearBtn:SetScript("OnClick", function(self) ns.Engine.SetPOI(self) end)
-    tip(clearBtn, "Clear POI marker from selected/current room")
+    tip(clearBtn, ns.L.TIP_CLEAR_POI)
 
     -- Nav target section
     local navTitle = panel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     navTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 26)  -- tightened from -30
-    navTitle:SetText("Navigation Target:")
+    navTitle:SetText(ns.L.LBL_NAV_TARGET)
     navTitle:SetTextColor(0.8, 0.8, 0.8, 1)
 
     maze.guidance_buttons = {}
@@ -322,7 +325,7 @@ local function buildRoomReferencePanel(maze)
 
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("TOP", panel, "TOP", 0, -3)
-    title:SetText("Current Room")
+    title:SetText(ns.L.LBL_CURRENT_ROOM)
     title:SetTextColor(0.8, 0.8, 0.8, 1)
 
     -- 5-cell cross: CELL=18 px, GAP=2 px, STEP=20 px.
@@ -391,10 +394,32 @@ local function buildRoomReferencePanel(maze)
             local r = ns.Engine.GetCurrentRoom()
             if r and r.button then ns.Engine.ToggleWall(r.button, dd) end
         end)
-        tip(btn, "Toggle " .. C.direction_strings[d] .. " wall on current room")
+        -- Short wall label ("East Wall") -- clicking is self-explanatory
+        -- (the wall visibly toggles), so the tooltip doesn't need to spell
+        -- out "toggle"/"current room". L.WALL_NAMES holds a fully-formed
+        -- compound where the locale's direction noun doesn't compound
+        -- cleanly with a %s template (e.g. deDE "Ostwand", not "Osten wand").
+        local wallName = ns.L.WALL_NAMES and ns.L.WALL_NAMES[d]
+            or string.format(ns.L.TIP_TOGGLE_WALL, ns.L.DIR[d])
+        tip(btn, wallName)
 
         maze.ref_btns[d] = btn
     end
+end
+
+------------------------------------------------------------
+-- Widen a button to fit its current label if the label is wider than the
+-- button's built-in minimum -- localized strings (esES/deDE/ptBR) run
+-- longer than the English text the fixed pixel widths below were sized for.
+------------------------------------------------------------
+local function fitButtonToText(btn, minW)
+    local fs = btn:GetFontString()
+    local w = minW
+    if fs then
+        local tw = fs:GetStringWidth() + 16
+        if tw > w then w = tw end
+    end
+    btn:SetWidth(w)
 end
 
 ------------------------------------------------------------
@@ -408,7 +433,7 @@ local function buildControls(maze)
     cb:SetChecked(true)
     local cbLabel = maze:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     cbLabel:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-    cbLabel:SetText("Track")
+    cbLabel:SetText(ns.L.BTN_TRACK)
     cb:SetScript("OnClick", function(self)
         ns.Engine.SetTracking(self:GetChecked() == true)
     end)
@@ -417,30 +442,34 @@ local function buildControls(maze)
     local setLocBtn = CreateFrame("Button", nil, maze, "UIPanelButtonTemplate")
     setLocBtn:SetSize(115, 22)
     setLocBtn:SetPoint("BOTTOMLEFT", maze, "BOTTOMLEFT", 90, 66)
-    setLocBtn:SetText("Set Player Loc")
+    setLocBtn:SetText(ns.L.BTN_SET_PLAYER_LOC)
+    fitButtonToText(setLocBtn, 115)
     setLocBtn.step = 0
     setLocBtn:SetScript("OnClick", function(self)
         if ns.Engine.GetSelectedRoom() == nil then
-            print("Select a room first (click its center)."); return
+            print(ns.L.MSG_SELECT_ROOM_FIRST); return
         end
         if self.step == 0 then
             self.step = 1
-            self:SetText("Click again!")
+            self:SetText(ns.L.BTN_CLICK_AGAIN)
+            fitButtonToText(self, 115)
         else
             self.step = 0
-            self:SetText("Set Player Loc")
+            self:SetText(ns.L.BTN_SET_PLAYER_LOC)
+            fitButtonToText(self, 115)
             ns.Engine.SetPlayerToSelected()
         end
     end)
-    tip(setLocBtn, "Move the player position to the selected room")
+    tip(setLocBtn, ns.L.TIP_SET_PLAYER_LOC)
 
     -- "I got ported!" button
     local trapBtn = CreateFrame("Button", nil, maze, "UIPanelButtonTemplate")
     trapBtn:SetSize(115, 22)
     trapBtn:SetPoint("LEFT", setLocBtn, "RIGHT", 4, 0)
-    trapBtn:SetText("I got ported!")
+    trapBtn:SetText(ns.L.BTN_GOT_PORTED)
+    fitButtonToText(trapBtn, 115)
     trapBtn:SetScript("OnClick", function() ns.Engine.HitTheTrap() end)
-    tip(trapBtn, "Mark current room as the teleport trap room")
+    tip(trapBtn, ns.L.TIP_GOT_PORTED)
 
     -- Opacity slider
     local sliderName = addonName .. "OpacitySlider"
@@ -455,7 +484,7 @@ local function buildControls(maze)
     local sText = _G[sliderName.."Text"]
     if sLow  then sLow:SetText("40%")   end
     if sHigh then sHigh:SetText("100%") end
-    if sText then sText:SetText("Opacity") end
+    if sText then sText:SetText(ns.L.LBL_OPACITY) end
     slider:SetScript("OnValueChanged", function(self, value)
         maze:SetAlpha(value / 100)
     end)
@@ -469,35 +498,36 @@ local function buildBottomBar(maze)
         local btn = CreateFrame("Button", nil, maze, "UIPanelButtonTemplate")
         btn:SetSize(w, 20)
         btn:SetText(text)
+        fitButtonToText(btn, w)
         btn:SetScript("OnClick", onClick)
         return btn
     end
 
-    local btnGrid = makeBtn("Grid Map", 80, function() ns.GridMap.Show() end)
+    local btnGrid = makeBtn(ns.L.BTN_GRID_MAP, 80, function() ns.GridMap.Show() end)
     btnGrid:SetPoint("BOTTOMLEFT", maze, "BOTTOMLEFT", 10, 14)
 
-    local btnNew = makeBtn("New Map", 80, function()
+    local btnNew = makeBtn(ns.L.BTN_NEW_MAP, 80, function()
         if maze.resetDialog then maze.resetDialog:Show() end
     end)
     btnNew:SetPoint("LEFT", btnGrid, "RIGHT", 4, 0)
 
     -- Persistent checkpoints (survive /reload; the in-game replacement for
     -- screenshotting the map at each milestone).
-    local btnSave = makeBtn("Save", 60, function()
+    local btnSave = makeBtn(ns.L.BTN_SAVE, 60, function()
         if ns.Checkpoints then ns.Checkpoints.Save() end
     end)
     btnSave:SetPoint("LEFT", btnNew, "RIGHT", 4, 0)
 
-    local btnRestore = makeBtn("Restore", 70, function()
+    local btnRestore = makeBtn(ns.L.BTN_RESTORE, 70, function()
         if not ns.Checkpoints then return end
         local list = ns.Checkpoints.List()
         if #list == 0 then
-            ns.Print("No checkpoints saved yet. Click Save first.")
+            ns.Print(ns.L.MSG_NO_CHECKPOINTS_YET)
             return
         end
         if MenuUtil and MenuUtil.CreateContextMenu then
             MenuUtil.CreateContextMenu(UIParent, function(owner, root)
-                root:CreateTitle("Checkpoints")
+                root:CreateTitle(ns.L.MENU_CHECKPOINTS)
                 for _, cp in ipairs(list) do
                     local name = cp.name
                     -- Each checkpoint is a submenu with explicit actions, so the
@@ -506,9 +536,9 @@ local function buildBottomBar(maze)
                     -- to chain :CreateButton off of; the annotation only models
                     -- the title+callback overload.
                     ---@diagnostic disable-next-line: missing-parameter
-                    local sub = root:CreateButton(name .. "  (" .. (cp.saved or "") .. ")")
-                    sub:CreateButton("Restore", function() ns.Checkpoints.Restore(name) end)
-                    sub:CreateButton("Delete",  function() ns.Checkpoints.Delete(name) end)
+                    local sub = root:CreateButton(string.format(ns.L.MENU_CHECKPOINT_ENTRY, name, cp.saved or ""))
+                    sub:CreateButton(ns.L.MENU_RESTORE, function() ns.Checkpoints.Restore(name) end)
+                    sub:CreateButton(ns.L.MENU_DELETE_CHECKPOINT,  function() ns.Checkpoints.Delete(name) end)
                 end
             end)
         else

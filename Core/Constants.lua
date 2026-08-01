@@ -30,9 +30,9 @@ ns.C = {
     coord_offset           = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}},
     dir_to_region          = {"TOP", "RIGHT", "BOTTOM", "LEFT"},
     dir_to_region_opposite = {"BOTTOM", "LEFT", "TOP", "RIGHT"},
-    direction_strings      = {"North", "East", "South", "West"},
+    -- Direction/color display names live in ns.L.DIR / ns.L.COLOR (Locales/Locales.lua):
+    -- this file loads before any Locales/*.lua file, so it can't hold locale-resolved text.
     -- POI colors
-    color_strings = {"Yellow", "Blue", "Red", "Green", "Purple"},
     poi_hex_colors = {
         "ffff00",  -- yellow
         "0099ff",  -- blue

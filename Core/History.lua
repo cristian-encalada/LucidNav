@@ -18,7 +18,7 @@ function History.Snapshot(label)
         csv         = ns.Engine.SerializeMap(),
         currentIdx  = cur and cur.index or nil,
         selectedIdx = sel and sel.index or nil,
-        label       = label or "action",
+        label       = label or ns.L.MSG_LABEL_ACTION,
     }
     -- Cap the stack, dropping the oldest entry silently.
     while #stack > MAX_ENTRIES do
@@ -32,13 +32,13 @@ end
 function History.Undo()
     local entry = table.remove(stack)
     if not entry then
-        ns.Print("Nothing to undo.")
+        ns.Print(ns.L.MSG_UNDO_NONE)
         return
     end
     ns.Engine.EraseRooms()
     ns.Engine.ImportMap(entry.csv)
     ns.Engine.SetSelectedByIndex(entry.selectedIdx)
-    ns.Print("Undid: " .. entry.label)
+    ns.Print(string.format(ns.L.MSG_UNDO_DID, entry.label))
 end
 
 ------------------------------------------------------------
@@ -57,5 +57,5 @@ end
 -- used from more than one call site, e.g. RoomMenu's modern + legacy paths).
 ------------------------------------------------------------
 function History.LabelUnlink(dirName)
-    return "Unlink " .. dirName
+    return string.format(ns.L.MSG_LABEL_UNLINK, dirName)
 end

@@ -64,18 +64,18 @@ local STAT_ORDER = {
     "poiConflicts", "navNoRoute",
 }
 local STAT_LABEL = {
-    roomsDiscovered   = "Rooms discovered",
-    poisSet           = "POIs set",
-    trapsMarked       = "Traps marked",
-    dedups            = "Dedups performed",
-    dedupRoomsRemoved = "  rooms merged away by dedup",
-    dedupSkippedTrap  = "Dedups skipped (trap room)",
-    jumps             = "Jump-overs (chose new room)",
-    keepLinked        = "Kept-linked (chose existing)",
-    wallToggles       = "Wall toggles",
-    roomsDeleted      = "Rooms deleted",
-    poiConflicts      = "POI conflicts warned",
-    navNoRoute        = "Navigation: no route found",
+    roomsDiscovered   = ns.L.STAT_ROOMS_DISCOVERED,
+    poisSet           = ns.L.STAT_POIS_SET,
+    trapsMarked       = ns.L.STAT_TRAPS_MARKED,
+    dedups            = ns.L.STAT_DEDUPS,
+    dedupRoomsRemoved = ns.L.STAT_DEDUP_ROOMS_REMOVED,
+    dedupSkippedTrap  = ns.L.STAT_DEDUP_SKIPPED_TRAP,
+    jumps             = ns.L.STAT_JUMPS,
+    keepLinked        = ns.L.STAT_KEEP_LINKED,
+    wallToggles       = ns.L.STAT_WALL_TOGGLES,
+    roomsDeleted      = ns.L.STAT_ROOMS_DELETED,
+    poiConflicts      = ns.L.STAT_POI_CONFLICTS,
+    navNoRoute        = ns.L.STAT_NAV_NO_ROUTE,
 }
 
 function Debug.Stat(key, n)
@@ -86,7 +86,7 @@ end
 function Debug.GetStat(key) return stats[key] or 0 end
 
 function Debug.PrintStats()
-    p("session stats:")
+    p(ns.L.MSG_DEBUG_STATS_HEADER)
     local shown = {}
     for _, k in ipairs(STAT_ORDER) do
         shown[k] = true
@@ -170,9 +170,9 @@ end
 ------------------------------------------------------------
 local function printList(title, list)
     if #list == 0 then
-        p(title .. ": clean")
+        p(string.format(ns.L.AUDIT_CLEAN, title))
     else
-        p(string.format("%s: %d issue(s)", title, #list))
+        p(string.format(ns.L.AUDIT_ISSUES_SUMMARY, title, #list))
         for _, m in ipairs(list) do p("    - " .. m) end
     end
 end
@@ -183,10 +183,10 @@ function Debug.FullReport(tag)
     Debug.Report(tag)
     Debug.PrintStats()
     if ns.Engine and ns.Engine.AuditMap then
-        printList("Map audit", ns.Engine.AuditMap())
+        printList(ns.L.LBL_MAP_AUDIT, ns.Engine.AuditMap())
     end
     if ns.GridMap and ns.GridMap.AuditWrap then
-        printList("Wrap audit", ns.GridMap.AuditWrap())
+        printList(ns.L.LBL_WRAP_AUDIT, ns.GridMap.AuditWrap())
     end
 end
 
@@ -226,15 +226,14 @@ function Debug.SetEnabled(on)
         baselineMem, lastMem = nil, nil
         accum, frames = 0, 0
         wipe(counters)
-        p("debug ON — live event logging + a report every " .. PROFILE_INTERVAL
-          .. "s. Run |cffffff00/ln debug|r again to stop and print a full summary.")
+        p(string.format(ns.L.MSG_DEBUG_ON, PROFILE_INTERVAL))
         if getCVar("scriptProfile") ~= "1" then
-            p("CPU profiling is OFF. To enable: |cffffff00/console scriptProfile 1|r then /reload.")
+            p(ns.L.MSG_CPU_PROFILING_OFF)
         end
         Debug.FullReport("baseline")
     else
         -- Final, comprehensive summary before going quiet.
-        p("debug OFF — final summary:")
+        p(ns.L.MSG_DEBUG_OFF)
         Debug.FullReport("final")
         enabled = false
     end

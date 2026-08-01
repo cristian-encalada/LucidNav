@@ -266,7 +266,7 @@ local function showWrapHint(cell)
                 dest.wrapGlow:SetColorTexture(1, 0.55, 0.1, 0.5)  -- orange: you emerge here
                 dest.wrapGlow:Show()
                 wrapGlowActive[#wrapGlowActive+1] = dest.wrapGlow
-                hints[#hints+1] = C.direction_strings[dir] .. " -> " .. ROW_LETTERS[wr] .. wc
+                hints[#hints+1] = ns.L.DIR[dir] .. " -> " .. ROW_LETTERS[wr] .. wc
             end
         end
     end
@@ -278,7 +278,7 @@ local function showWrapHint(cell)
 
     GameTooltip:SetOwner(cell, "ANCHOR_RIGHT")
     GameTooltip:ClearLines()
-    GameTooltip:AddLine("Edge wrap")
+    GameTooltip:AddLine(ns.L.TIP_EDGE_WRAP)
     for _, h in ipairs(hints) do GameTooltip:AddLine(h, 1, 0.82, 0) end
     GameTooltip:Show()
 end
@@ -489,8 +489,8 @@ function GridMap.AuditWrap()
                     local pc, pr = gridWrap(r.gcol + dcol[dir], r.grow + drow[dir])
                     if pc ~= n.gcol or pr ~= n.grow then
                         out[#out+1] = string.format(
-                            "%s %s-> room %d: model predicts %s, but room %d is at %s.",
-                            cellName(r.gcol, r.grow), C.direction_strings[dir]:sub(1,1),
+                            ns.L.AUDIT_WRAP_MISMATCH,
+                            cellName(r.gcol, r.grow), ns.L.DIR[dir]:sub(1,1),
                             n.index, cellName(pc, pr), n.index, cellName(n.gcol, n.grow))
                     end
                 end
