@@ -37,6 +37,10 @@ local function showModern(room)
         end)
 
         if hasAnyNeighbor(room) then
+            -- CreateButton(title) with no callback returns a submenu root to
+            -- chain further :CreateButton calls off of; the annotation only
+            -- models the title+callback overload.
+            ---@diagnostic disable-next-line: missing-parameter
             local unlink = root:CreateButton(LABEL_UNLINK)
             for i = 1, 4 do
                 if room.neighbors[i] then

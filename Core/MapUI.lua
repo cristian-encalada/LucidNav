@@ -502,6 +502,10 @@ local function buildBottomBar(maze)
                     local name = cp.name
                     -- Each checkpoint is a submenu with explicit actions, so the
                     -- top-level entry never ambiguously "restores on click".
+                    -- CreateButton(title) with no callback returns a submenu root
+                    -- to chain :CreateButton off of; the annotation only models
+                    -- the title+callback overload.
+                    ---@diagnostic disable-next-line: missing-parameter
                     local sub = root:CreateButton(name .. "  (" .. (cp.saved or "") .. ")")
                     sub:CreateButton("Restore", function() ns.Checkpoints.Restore(name) end)
                     sub:CreateButton("Delete",  function() ns.Checkpoints.Delete(name) end)

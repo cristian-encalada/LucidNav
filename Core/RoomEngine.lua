@@ -7,11 +7,30 @@ local Engine = ns.Engine
 ------------------------------------------------------------
 -- Private state
 ------------------------------------------------------------
+---@class Room
+---@field index number 1-based room id (room 1 is the start/anchor)
+---@field neighbors table<number, Room?> linked rooms by direction (N=1, E=2, S=3, W=4)
+---@field walls table<number, boolean> true = blocked edge on that side
+---@field cx number dead-reckoned canvas cell x (+cx = east)
+---@field cy number dead-reckoned canvas cell y (+cy = south)
+---@field gcol number? 8x8 grid column from wrap-aware BFS (GridMap.ComputePositions)
+---@field grow number? 8x8 grid row from wrap-aware BFS
+---@field visited boolean scratch flag used by navigation BFS/DFS
+---@field poi_index number 0 none, 1-5 rune, 6-10 orb
+---@field POI_c number? POI color index (1-5), set alongside poi_index
+---@field POI_t string? "rune" or "orb", set alongside poi_index
+---@field is_trap boolean? true if this room is the teleport trap
+---@field isOverlap boolean? shares a grid/canvas cell with another room (cross)
+---@field neighbor_indices table<number, number>? transient: raw indices during ImportMap, resolved into `neighbors`
+---@field button table? the canvas cell Button frame for this room
+
 local pool         = {}
+---@type table<number, Room>
 local rooms        = {}
 local map          = {}
 local poirooms     = {}
 local trapRoom     = nil
+---@type Room?
 local current_room = nil
 local last_dir     = nil
 local last_room_number = 0
@@ -432,6 +451,7 @@ end
 
 function Engine.RefreshConnectors() refreshConnectors() end
 
+---@return Room
 local function newRoom()
     local r = {}
     r.neighbors  = {}
@@ -518,7 +538,12 @@ local function getRoomJumpOffset(baseCX, baseCY, dcx, dcy)
     return oX, oY
 end
 
+-- Only ever called once movement tracking has a current room (see the two
+-- call sites in onUpdate/JumpOver, both post-Init/LoadSavedMap).
+---@return Room?
 local function addRoom(dir, forceJump)
+    local cur = current_room
+    if not cur then return end
     local offset = C.coord_offset[dir]
     local dcx, dcy = offset[1], offset[2]
 
@@ -527,13 +552,13 @@ local function addRoom(dir, forceJump)
     if not forceJump and ns.History then ns.History.Snapshot("Map room") end
 
     if not forceJump then
-        local targetCX = current_room.cx + dcx
-        local targetCY = current_room.cy + dcy
+        local targetCX = cur.cx + dcx
+        local targetCY = cur.cy + dcy
         for _, v in pairs(rooms) do
             if v.cx == targetCX and v.cy == targetCY then
-                current_room.neighbors[dir]              = v
-                v.neighbors[getOppositeDir(dir)]         = current_room
-                pendingJump = {dir = dir, existing = v, prev = current_room}
+                cur.neighbors[dir]                = v
+                v.neighbors[getOppositeDir(dir)] = cur
+                pendingJump = {dir = dir, existing = v, prev = cur}
                 if ns.maze and ns.maze.jumpDialog then ns.maze.jumpDialog:Show() end
                 return v
             end
@@ -541,11 +566,11 @@ local function addRoom(dir, forceJump)
     end
 
     local r = newRoom()
-    local oX, oY = getRoomJumpOffset(current_room.cx, current_room.cy, dcx, dcy)
-    r.cx = current_room.cx + oX
-    r.cy = current_room.cy + oY
-    r.neighbors[getOppositeDir(dir)] = current_room
-    current_room.neighbors[dir]      = r
+    local oX, oY = getRoomJumpOffset(cur.cx, cur.cy, dcx, dcy)
+    r.cx = cur.cx + oX
+    r.cy = cur.cy + oY
+    r.neighbors[getOppositeDir(dir)] = cur
+    cur.neighbors[dir]               = r
     createButton(r)
     setRoomNumber(r)
     if ns.Debug then ns.Debug.Stat("roomsDiscovered") end
@@ -588,7 +613,14 @@ end
 ------------------------------------------------------------
 -- BFS queue helpers
 ------------------------------------------------------------
+---@generic T
+---@param q table<number, T>
+---@param v T?
+---@return number, number
 local function qPush(q, min, max, v) q[max+1]=v; return min, max+1 end
+---@generic T
+---@param q table<number, T>
+---@return number, number, T?
 local function qPop(q, min, max)
     if min>max then return min,max,nil end
     return min+1, max, q[min]
@@ -648,6 +680,7 @@ local function deDuplicateMap(orig, dupe)
         local cur, dcur
         r1,r2,cur  = qPop(rQ,r1,r2)
         d1,d2,dcur = qPop(dQ,d1,d2)
+        if cur == nil then break end  -- rQ is never empty here, but satisfies the type checker
 
         -- Skip if we've already processed this pairing on either side
         if not visitedOrig[cur] and not (dcur and visitedDupe[dcur]) then
@@ -807,6 +840,7 @@ local function navigateToTarget(targetRoom, startingRoom)
         r1,r2,cur  = qPop(rQ,r1,r2)
         d1,d2,tDir = qPop(dQ,d1,d2)
         p1,p2,tPOI = qPop(pQ,p1,p2)
+        if cur == nil or tDir == nil or tPOI == nil then break end  -- the three queues stay in lockstep; satisfies the type checker
         if not cur.visited then
             cur.visited = true
             for i = 1,4 do
@@ -986,7 +1020,7 @@ logoutFrame:SetScript("OnEvent", function(self, event, isInitialLogin, isReloadi
     if rooms == nil then return end
     if LucidNavDB == nil then LucidNavDB = {} end
     LucidNavDB.mapData      = Engine.SerializeMap()
-    LucidNavDB.last_saved   = os.date("%Y-%m-%d %H:%M")
+    LucidNavDB.last_saved   = date("%Y-%m-%d %H:%M")
     LucidNavDB.matched_pairs = matched_pairs
 end)
 
@@ -1217,28 +1251,31 @@ function Engine.HitTheTrap()
     if not last_dir then
         print("Cannot process trap: no movement recorded yet. Walk somewhere first."); return
     end
+    -- last_dir is only ever set once movement tracking has a current room.
+    local cur = current_room
+    if not cur then return end
     if ns.History then ns.History.Snapshot("Trap") end
     if ns.Debug then ns.Debug.Stat("trapsMarked") end
-    local prevRoom = current_room.neighbors[getOppositeDir(last_dir)]
+    local prevRoom = cur.neighbors[getOppositeDir(last_dir)]
     if prevRoom then
-        current_room.is_trap = true; trapRoom = current_room
-        recolorRoom(current_room)
-        print(string.format("Room %d marked as the teleport trap room (orange on map).", current_room.index))
+        cur.is_trap = true; trapRoom = cur
+        recolorRoom(cur)
+        print(string.format("Room %d marked as the teleport trap room (orange on map).", cur.index))
         -- Wall the passage on BOTH sides but KEEP the neighbor links. Keeping the
         -- trap connected to its entrance lets the Grid Map place it via BFS; a
         -- disconnected trap falls back to imprecise cx/cy placement and visually
         -- overlaps other cells. is_trap + walls still stop navigation from routing
         -- through it, and a re-entry is recognised rather than duplicated.
-        prevRoom.walls[last_dir]                  = true
-        current_room.walls[getOppositeDir(last_dir)] = true
+        prevRoom.walls[last_dir]  = true
+        cur.walls[getOppositeDir(last_dir)] = true
         print(string.format("Room %d's %s exit walled off.", prevRoom.index, C.direction_strings[last_dir]))
         recolorRoom(prevRoom)
     else
         print("Warning: could not identify the trap room entrance. Creating new room for current position.")
     end
     local r = newRoom()
-    local oX, oY = getRoomJumpOffset(current_room.cx, current_room.cy, 0, 1)
-    r.cx = current_room.cx + oX; r.cy = current_room.cy + oY
+    local oX, oY = getRoomJumpOffset(cur.cx, cur.cy, 0, 1)
+    r.cx = cur.cx + oX; r.cy = cur.cy + oY
     createButton(r); setRoomNumber(r); setCurrentRoom(r)
     Engine.UpdateNavButtonText()
 end
