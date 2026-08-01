@@ -99,7 +99,7 @@ local function setSelectedBtn(btn, force)
         ns.maze.selMarker:Show()
     end
     local label = selected_btn and selected_btn.room.index or "None"
-    ns.maze.selected_room_label:SetText("Selected: |cff00ff00" .. label .. "|r")
+    ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, tostring(label)))
 end
 
 ------------------------------------------------------------
@@ -255,7 +255,7 @@ end
 ------------------------------------------------------------
 local function setRoomNumber(r)
     r.button.text:SetFont("Fonts\\FRIZQT__.TTF", r.index < 100 and 10 or 8, "")
-    r.button.text:SetText("|cffeeeeee" .. r.index .. "|r")
+    r.button.text:SetText(ns.ColorText(C.textColor.roomIndex, tostring(r.index)))
 end
 
 -- Draw each blocked edge as a solid paper-style line. Cross/overlap rooms are
@@ -468,7 +468,7 @@ local function setCurrentRoom(r)
     ns.playerNav:SetPoint("CENTER", r.button, "CENTER")
     ns.playerNav.tex:SetRotation(math.rad(getRotation(last_dir or C.north)))
 
-    ns.maze.current_room_label:SetText("Current: |cff00ff00" .. r.index .. "|r")
+    ns.maze.current_room_label:SetText("Current: " .. ns.ColorText(C.textColor.info, tostring(r.index)))
     setSelectedBtn(r.button, true)
 
     refreshMapViews()
@@ -568,7 +568,7 @@ local function eraseRooms()
     selected_btn = nil
     if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
     if ns.maze and ns.maze.selected_room_label then
-        ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+        ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
     end
 end
 
@@ -740,7 +740,7 @@ local function deDuplicateMap(orig, dupe)
         selected_btn = nil
         if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
         if ns.maze and ns.maze.selected_room_label then
-            ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+            ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
         end
     end
 
@@ -758,19 +758,14 @@ local function outputGuidance(directions)
     local navString = ""
     if navtarget == 11 then
         if steps ~= 1 then
-            print("I have detected an unexplored room " .. steps .. " steps from here!")
+            print(string.format("I have detected an unexplored room %d steps from here!", steps))
         else
             navString = "Unexplored room: "
         end
     else
         if steps ~= 1 then
-            local destStr = ""
-            if navtarget > 5 then
-                destStr = C.color_strings[navtarget-5] .. " Orb"
-            elseif navtarget > 0 then
-                destStr = C.color_strings[navtarget] .. " Rune"
-            end
-            print("I have detected your destination (" .. destStr .. ") " .. steps .. " steps from here!")
+            local destStr = navtarget > 0 and ns.PoiName(navtarget) or ""
+            print(string.format("I have detected your destination (%s) %d steps from here!", destStr, steps))
         end
     end
     for i = 2, 4 do
@@ -946,7 +941,7 @@ function Engine.ImportMap(t)
             local ni = v.neighbor_indices[nb]
             if ni ~= nil then
                 if rooms[ni] == nil then
-                    print("Error: room", v.index, "references missing room", ni)
+                    print(string.format("Error: room %d references missing room %d", v.index, ni))
                 else
                     v.neighbors[nb] = rooms[ni]
                 end
@@ -1042,9 +1037,9 @@ local function setPOIClick(self)
     if poirooms[self.poi_index] == target then return end
 
     if poirooms[self.poi_index] ~= nil and poi_warned ~= self.poi_index then
-        print("WOAH WOAH WOAH, this point of interest was already defined as room " ..
-              poirooms[self.poi_index].index ..
-              "! Click again to confirm a loop in the map and de-duplicate nodes")
+        print(string.format(
+            "WOAH WOAH WOAH, this point of interest was already defined as room %d! Click again to confirm a loop in the map and de-duplicate nodes",
+            poirooms[self.poi_index].index))
         poi_warned = self.poi_index
         if ns.Debug then ns.Debug.Stat("poiConflicts") end
         return
@@ -1100,11 +1095,11 @@ local function onUpdate(self, elapsed)
         local fx, fy = math.floor(x), math.floor(y)
         if fx ~= lastShownX then
             lastShownX = fx
-            ns.maze.x_label:SetText("X: |cff00ff00" .. fx .. "|r")
+            ns.maze.x_label:SetText("X: " .. ns.ColorText(C.textColor.info, tostring(fx)))
         end
         if fy ~= lastShownY then
             lastShownY = fy
-            ns.maze.y_label:SetText("Y: |cff00ff00" .. fy .. "|r")
+            ns.maze.y_label:SetText("Y: " .. ns.ColorText(C.textColor.info, tostring(fy)))
         end
     end
 
@@ -1134,7 +1129,7 @@ end
 function Engine.LoadSavedMap()
     if LucidNavDB and LucidNavDB.mapData then
         local saved = LucidNavDB.last_saved or "unknown time"
-        print("|cff00ff00LucidNav:|r Found a saved map from " .. saved .. ". Loading it...")
+        ns.Print(string.format("Found a saved map from %s. Loading it...", saved))
         Engine.ImportMap(LucidNavDB.mapData)
         -- ImportMap already restored the saved current room (matches the player's
         -- physical position after a /reload). Only snap to the entrance on an
@@ -1228,7 +1223,7 @@ function Engine.HitTheTrap()
     if prevRoom then
         current_room.is_trap = true; trapRoom = current_room
         recolorRoom(current_room)
-        print("Room " .. current_room.index .. " marked as the teleport trap room (orange on map).")
+        print(string.format("Room %d marked as the teleport trap room (orange on map).", current_room.index))
         -- Wall the passage on BOTH sides but KEEP the neighbor links. Keeping the
         -- trap connected to its entrance lets the Grid Map place it via BFS; a
         -- disconnected trap falls back to imprecise cx/cy placement and visually
@@ -1236,7 +1231,7 @@ function Engine.HitTheTrap()
         -- through it, and a re-entry is recognised rather than duplicated.
         prevRoom.walls[last_dir]                  = true
         current_room.walls[getOppositeDir(last_dir)] = true
-        print("Room " .. prevRoom.index .. "'s " .. C.direction_strings[last_dir] .. " exit walled off.")
+        print(string.format("Room %d's %s exit walled off.", prevRoom.index, C.direction_strings[last_dir]))
         recolorRoom(prevRoom)
     else
         print("Warning: could not identify the trap room entrance. Creating new room for current position.")
@@ -1304,13 +1299,13 @@ function Engine.DeleteRoom(room)
     -- Room 1 is the maze entrance: it anchors the Grid Map layout and the
     -- respawn-to-entrance logic, so it must never be deleted.
     if room == rooms[1] then
-        print("|cff00ff00LucidNav:|r Cannot delete the entrance room (Room 1).")
+        ns.PrintWarning("Cannot delete the entrance room (Room 1).")
         return
     end
     local total = 0
     for _ in pairs(rooms) do total = total + 1 end
     if total <= 1 then
-        print("|cff00ff00LucidNav:|r Cannot delete the only room on the map.")
+        ns.PrintWarning("Cannot delete the only room on the map.")
         return
     end
     if ns.History then ns.History.Snapshot("Delete room") end
@@ -1348,7 +1343,7 @@ function Engine.DeleteRoom(room)
         selected_btn = nil
         if ns.maze and ns.maze.selMarker then ns.maze.selMarker:Hide() end
         if ns.maze and ns.maze.selected_room_label then
-            ns.maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+            ns.maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
         end
     end
 
@@ -1520,8 +1515,8 @@ function Engine.UpdateNavButtonText()
 
         local text
         if isMatched then
-            local name = (i <= 5) and (C.color_strings[i] .. " Rune") or (C.color_strings[i-5] .. " Orb")
-            text = "|cff44cc44v|r |cff555555" .. name
+            local name = ns.PoiName(i)
+            text = ns.ColorText(C.textColor.matched, "v") .. " |cff" .. C.textColor.unmatched .. name
             if steps and steps > 0 then text = text .. " (" .. steps .. ")"
             elseif steps == 0 then text = text .. " (here)" end
             text = text .. "|r"
@@ -1530,16 +1525,14 @@ function Engine.UpdateNavButtonText()
                 text = "Unexplored Territory"
             elseif i == 12 then
                 text = "Teleport Trap"
-            elseif i > 5 then
-                text = "|cff" .. C.poi_hex_colors[i-5] .. C.color_strings[i-5] .. " Orb|r"
             else
-                text = "|cff" .. C.poi_hex_colors[i] .. C.color_strings[i] .. " Rune|r"
+                text = ns.PoiName(i, true)
             end
             if targetRoom ~= nil then
                 if steps ~= nil and steps > 0 then
                     text = text .. " |cffaaaaaa(" .. steps .. ")|r"
                 elseif steps == 0 then
-                    text = text .. " |cff00ff00(here)|r"
+                    text = text .. " " .. ns.ColorText(C.textColor.info, "(here)")
                 end
             end
         end
@@ -1556,11 +1549,9 @@ function Engine.UpdateNavButtonText()
             if room then
                 local reachable = (dist[room] ~= nil)
                 if poiReachable[i] and not reachable then
-                    local name = (i <= 5) and (C.color_strings[i] .. " Rune")
-                                           or  (C.color_strings[i-5] .. " Orb")
-                    local hex  = (i <= 5) and C.poi_hex_colors[i] or C.poi_hex_colors[i-5]
-                    print("|cffff8800LucidNav warning:|r |cff" .. hex .. name .. "|r (room "
-                          .. room.index .. ") is no longer reachable from here — you may have walled it off.")
+                    ns.PrintWarning(string.format(
+                        "%s (room %d) is no longer reachable from here — you may have walled it off.",
+                        ns.PoiName(i, true), room.index))
                     if ns.Debug then ns.Debug.Stat("poiUnreachableWarn") end
                 end
                 poiReachable[i] = reachable

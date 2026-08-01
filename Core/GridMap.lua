@@ -14,6 +14,10 @@ local GCOFF_Y = 16
 
 local runeIconSuffixes = {"yellow", "blue", "orange", "green", "purple"}
 
+-- Shared A-H row labels (grid coordinate letters), used by the header row,
+-- the wrap-offset markers, and the edge-wrap hint tooltip below.
+local ROW_LETTERS = {"A","B","C","D","E","F","G","H"}
+
 local function flipSidesGrid(p)
     return p < 5 and p + 4 or p - 4
 end
@@ -239,8 +243,6 @@ local GRID_BM = 22  -- bottom margin for wrap offset labels
 -- actually reappear in after the ±4 twist wrap (Pac-Man-style tunnel), with a
 -- tooltip naming it. Makes the otherwise-invisible wrap offset obvious.
 ------------------------------------------------------------
-local WRAP_DIR_NAMES  = {"North", "East", "South", "West"}
-local WRAP_ROW_LABELS = {"A","B","C","D","E","F","G","H"}
 local wrapDcol = {0, 1, 0, -1}
 local wrapDrow = {-1, 0, 1, 0}
 local wrapGlowActive = {}
@@ -264,7 +266,7 @@ local function showWrapHint(cell)
                 dest.wrapGlow:SetColorTexture(1, 0.55, 0.1, 0.5)  -- orange: you emerge here
                 dest.wrapGlow:Show()
                 wrapGlowActive[#wrapGlowActive+1] = dest.wrapGlow
-                hints[#hints+1] = WRAP_DIR_NAMES[dir] .. " -> " .. WRAP_ROW_LABELS[wr] .. wc
+                hints[#hints+1] = C.direction_strings[dir] .. " -> " .. ROW_LETTERS[wr] .. wc
             end
         end
     end
@@ -299,8 +301,6 @@ local function createGridMap()
     gridFrame:SetFrameLevel(20)
     gridFrame:Hide()
 
-    local rowLabels = {"A","B","C","D","E","F","G","H"}
-
     for col = 1, 8 do
         local t = gridFrame:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         t:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", GCOFF_X+(col-1)*(GCELL+GCPAD)+GCELL/2-3, -3)
@@ -310,7 +310,7 @@ local function createGridMap()
     for row = 1, 8 do
         local t = gridFrame:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         t:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 3, -(GCOFF_Y+(row-1)*(GCELL+GCPAD)+GCELL/2-4))
-        t:SetText(rowLabels[row])
+        t:SetText(ROW_LETTERS[row])
         t:SetTextColor(0.65,0.65,0.65,1)
     end
 
@@ -408,7 +408,7 @@ local function createGridMap()
     for row = 1, 8 do
         mkMarker(GCOFF_X + span + 4,
                  GCOFF_Y + (row-1)*(GCELL+GCPAD) + GCELL/2 - 6,
-                 rowLabels[flipSidesGrid(row)], 0.55, 0.45, 0.30)
+                 ROW_LETTERS[flipSidesGrid(row)], 0.55, 0.45, 0.30)
     end
     for col = 1, 8 do
         mkMarker(GCOFF_X + (col-1)*(GCELL+GCPAD) + GCELL/2 - 4,
@@ -451,7 +451,6 @@ function GridMap.Refresh(skipCompute)
     refreshGridMap(skipCompute)
 end
 
-local ROW_LETTERS = {"A","B","C","D","E","F","G","H"}
 local function cellName(col, row)
     if not (col and row) then return "?" end
     return (ROW_LETTERS[row] or "?") .. col

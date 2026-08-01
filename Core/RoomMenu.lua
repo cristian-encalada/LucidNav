@@ -5,6 +5,17 @@ ns.RoomMenu = ns.RoomMenu or {}
 local RoomMenu = ns.RoomMenu
 
 ------------------------------------------------------------
+-- Menu item labels, defined once and shared by both the modern (MenuUtil)
+-- and legacy (EasyMenu) code paths below instead of being hardcoded twice.
+------------------------------------------------------------
+local LABEL_SET_CURRENT = "Set as current room"
+local LABEL_UNLINK      = "Unlink neighbor"
+local LABEL_DETACH      = "Detach (unlink all neighbors)"
+local LABEL_CLEAR_TRAP  = "Clear trap"
+local LABEL_UNDO        = "Undo last action"
+local LABEL_DELETE      = "Delete room"
+
+------------------------------------------------------------
 -- Helper: does this room have at least one neighbor?
 ------------------------------------------------------------
 local function hasAnyNeighbor(room)
@@ -21,42 +32,42 @@ local function showModern(room)
     MenuUtil.CreateContextMenu(UIParent, function(owner, root)
         root:CreateTitle("Room " .. room.index)
 
-        root:CreateButton("Set as current room", function()
+        root:CreateButton(LABEL_SET_CURRENT, function()
             ns.Engine.SetCurrentRoom(room)
         end)
 
         if hasAnyNeighbor(room) then
-            local unlink = root:CreateButton("Unlink neighbor")
+            local unlink = root:CreateButton(LABEL_UNLINK)
             for i = 1, 4 do
                 if room.neighbors[i] then
                     local dir, dirName = i, C.direction_strings[i]
                     unlink:CreateButton(dirName, function()
-                        if ns.History then ns.History.Snapshot("Unlink " .. dirName) end
+                        if ns.History then ns.History.Snapshot(ns.History.LabelUnlink(dirName)) end
                         ns.Engine.UnlinkNeighbor(room, dir)
                     end)
                 end
             end
 
-            root:CreateButton("Detach (unlink all neighbors)", function()
+            root:CreateButton(LABEL_DETACH, function()
                 if ns.History then ns.History.Snapshot("Detach") end
                 ns.Engine.DetachRoom(room)
             end)
         end
 
         if room.is_trap then
-            root:CreateButton("Clear trap", function()
+            root:CreateButton(LABEL_CLEAR_TRAP, function()
                 ns.Engine.ClearTrap(room)
             end)
         end
 
         if ns.History and ns.History.HasEntries() then
-            root:CreateButton("Undo last action", function()
+            root:CreateButton(LABEL_UNDO, function()
                 ns.History.Undo()
             end)
         end
 
         root:CreateDivider()
-        root:CreateButton("Delete room", function()
+        root:CreateButton(LABEL_DELETE, function()
             ns.Engine.DeleteRoom(room)
         end)
     end)
@@ -73,7 +84,7 @@ local function showLegacy(room)
     local menu = {
         { text = "Room " .. room.index, isTitle = true, notCheckable = true },
         {
-            text = "Set as current room", notCheckable = true,
+            text = LABEL_SET_CURRENT, notCheckable = true,
             func = function() ns.Engine.SetCurrentRoom(room) end,
         },
     }
@@ -86,15 +97,15 @@ local function showLegacy(room)
                 sub[#sub+1] = {
                     text = dirName, notCheckable = true,
                     func = function()
-                        if ns.History then ns.History.Snapshot("Unlink " .. dirName) end
+                        if ns.History then ns.History.Snapshot(ns.History.LabelUnlink(dirName)) end
                         ns.Engine.UnlinkNeighbor(room, dir)
                     end,
                 }
             end
         end
-        menu[#menu+1] = { text = "Unlink neighbor", notCheckable = true, hasArrow = true, menuList = sub }
+        menu[#menu+1] = { text = LABEL_UNLINK, notCheckable = true, hasArrow = true, menuList = sub }
         menu[#menu+1] = {
-            text = "Detach (unlink all neighbors)", notCheckable = true,
+            text = LABEL_DETACH, notCheckable = true,
             func = function()
                 if ns.History then ns.History.Snapshot("Detach") end
                 ns.Engine.DetachRoom(room)
@@ -104,19 +115,19 @@ local function showLegacy(room)
 
     if room.is_trap then
         menu[#menu+1] = {
-            text = "Clear trap", notCheckable = true,
+            text = LABEL_CLEAR_TRAP, notCheckable = true,
             func = function() ns.Engine.ClearTrap(room) end,
         }
     end
 
     menu[#menu+1] = {
-        text = "Undo last action", notCheckable = true,
+        text = LABEL_UNDO, notCheckable = true,
         disabled = not (ns.History and ns.History.HasEntries()),
         func = function() if ns.History then ns.History.Undo() end end,
     }
 
     menu[#menu+1] = {
-        text = "Delete room", notCheckable = true,
+        text = LABEL_DELETE, notCheckable = true,
         func = function() ns.Engine.DeleteRoom(room) end,
     }
 
@@ -133,6 +144,6 @@ function RoomMenu.Show(room)
     elseif type(EasyMenu) == "function" then
         showLegacy(room)
     else
-        print("|cff00ff00LucidNav:|r Context menu API unavailable on this client.")
+        ns.Print("Context menu API unavailable on this client.")
     end
 end

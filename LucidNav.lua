@@ -26,7 +26,7 @@ SlashCmdList["LucidNav"] = function(msg)
         if ns.Checkpoints then
             local list = ns.Checkpoints.List()
             if #list == 0 then
-                print("|cff00ff00LucidNav:|r No checkpoints saved.")
+                ns.Print("No checkpoints saved.")
             else
                 print("|cff00ff00LucidNav checkpoints:|r")
                 for _, cp in ipairs(list) do

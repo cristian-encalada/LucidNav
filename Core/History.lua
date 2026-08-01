@@ -32,13 +32,13 @@ end
 function History.Undo()
     local entry = table.remove(stack)
     if not entry then
-        print("|cff00ff00LucidNav:|r Nothing to undo.")
+        ns.Print("Nothing to undo.")
         return
     end
     ns.Engine.EraseRooms()
     ns.Engine.ImportMap(entry.csv)
     ns.Engine.SetSelectedByIndex(entry.selectedIdx)
-    print("|cff00ff00LucidNav:|r Undid: " .. entry.label)
+    ns.Print("Undid: " .. entry.label)
 end
 
 ------------------------------------------------------------
@@ -50,4 +50,12 @@ end
 
 function History.HasEntries()
     return #stack > 0
+end
+
+------------------------------------------------------------
+-- Shared snapshot-label builders (single source of truth for label wording
+-- used from more than one call site, e.g. RoomMenu's modern + legacy paths).
+------------------------------------------------------------
+function History.LabelUnlink(dirName)
+    return "Unlink " .. dirName
 end

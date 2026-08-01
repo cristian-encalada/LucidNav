@@ -73,6 +73,15 @@ ns.C = {
     },
     -- Semi-transparent highlight shown on the edge zone currently under the cursor.
     wallHoverColor = {1, 1, 1, 0.35},
+    -- Hex color codes reused across several label/print call sites (paired
+    -- with ns.ColorText). Centralized so the same shade isn't hand-typed
+    -- at every SetText/print site.
+    textColor = {
+        info      = "00ff00",  -- current/selected/X/Y labels, info prints
+        roomIndex = "eeeeee",  -- room-index text in labels
+        matched   = "44cc44",  -- "v" matched-pair glyph
+        unmatched = "555555",  -- "o" unmatched-pair glyph
+    },
     -- Old save format container size (for backward-compat conversion)
     oldContainerW = 50000,
     oldButtonStep = 23,   -- old buttonW(18) + 5

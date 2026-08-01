@@ -48,7 +48,7 @@ function Checkpoints.Save(name)
         saved = date("%Y-%m-%d %H:%M"),
         ts    = time(),
     }
-    print("|cff00ff00LucidNav:|r Checkpoint saved: " .. name)
+    ns.Print("Checkpoint saved: " .. name)
 end
 
 ------------------------------------------------------------
@@ -58,12 +58,12 @@ function Checkpoints.Restore(name)
     local cp = store()
     local entry = name and cp[name]
     if not entry then
-        print("|cff00ff00LucidNav:|r No checkpoint named '" .. tostring(name) .. "'.")
+        ns.Print(string.format("No checkpoint named '%s'.", tostring(name)))
         return
     end
     if ns.History then ns.History.Snapshot("Pre-restore") end
     ns.Engine.ImportMap(entry.csv)
-    print("|cff00ff00LucidNav:|r Restored checkpoint: " .. name)
+    ns.Print("Restored checkpoint: " .. name)
 end
 
 ------------------------------------------------------------
@@ -83,6 +83,6 @@ function Checkpoints.Delete(name)
     local cp = store()
     if cp[name] then
         cp[name] = nil
-        print("|cff00ff00LucidNav:|r Checkpoint deleted: " .. name)
+        ns.Print("Checkpoint deleted: " .. name)
     end
 end

@@ -30,7 +30,7 @@ local accum     = 0
 local frames    = 0          -- frames counted in the current window
 
 local function p(msg)
-    print("|cff66ccffLucidNav[dbg]:|r " .. msg)
+    ns.PrintDebug(msg)
 end
 
 -- API shims: a few of these globals have namespaced variants across client

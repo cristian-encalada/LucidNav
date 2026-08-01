@@ -43,19 +43,19 @@ local function buildFrame()
 
     maze.current_room_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.current_room_label:SetPoint("TOPLEFT", maze, "TOPLEFT", 60, -35)
-    maze.current_room_label:SetText("Current: |cff00ff00—|r")
+    maze.current_room_label:SetText("Current: " .. ns.ColorText(C.textColor.info, "—"))
 
     maze.selected_room_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.selected_room_label:SetPoint("LEFT", maze.current_room_label, "RIGHT", 20, 0)
-    maze.selected_room_label:SetText("Selected: |cff00ff00None|r")
+    maze.selected_room_label:SetText("Selected: " .. ns.ColorText(C.textColor.info, "None"))
 
     maze.x_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.x_label:SetPoint("LEFT", maze.selected_room_label, "RIGHT", 20, 0)
-    maze.x_label:SetText("X: |cff00ff00—|r")
+    maze.x_label:SetText("X: " .. ns.ColorText(C.textColor.info, "—"))
 
     maze.y_label = maze:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     maze.y_label:SetPoint("LEFT", maze.x_label, "RIGHT", 10, 0)
-    maze.y_label:SetText("Y: |cff00ff00—|r")
+    maze.y_label:SetText("Y: " .. ns.ColorText(C.textColor.info, "—"))
 
     return maze
 end
@@ -197,7 +197,7 @@ local function buildMarkerPanel(maze)
         runeTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
         rune.t = "rune"; rune.c = i; rune.poi_index = i
         rune:SetScript("OnClick", function(self) ns.Engine.SetPOI(self) end)
-        tip(rune, C.color_strings[i] .. " Rune")
+        tip(rune, ns.PoiName(i))
         maze.poi_buttons[i] = runeTex
 
         -- Orb button
@@ -210,7 +210,7 @@ local function buildMarkerPanel(maze)
         orbTex:SetVertexColor(rgb[1], rgb[2], rgb[3])
         orb.t = "orb"; orb.c = i; orb.poi_index = i+5
         orb:SetScript("OnClick", function(self) ns.Engine.SetPOI(self) end)
-        tip(orb, C.color_strings[i] .. " Orb")
+        tip(orb, ns.PoiName(i + 5))
         maze.poi_buttons[i+5] = orbTex
 
         -- Color label anchored to the right of the orb button
@@ -226,7 +226,7 @@ local function buildMarkerPanel(maze)
         local matchFs = matchBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         matchFs:SetAllPoints(); matchFs:SetJustifyH("CENTER")
         matchBtn:SetFontString(matchFs)
-        matchBtn:SetText("|cff555555o|r")
+        matchBtn:SetText(ns.ColorText(C.textColor.unmatched, "o"))
         matchBtn.colorIdx = i
         matchBtn:SetScript("OnClick", function(self) ns.Engine.ToggleMatched(self.colorIdx) end)
         tip(matchBtn, "Mark " .. C.color_strings[i] .. " pair as matched/unmatched")
@@ -492,7 +492,7 @@ local function buildBottomBar(maze)
         if not ns.Checkpoints then return end
         local list = ns.Checkpoints.List()
         if #list == 0 then
-            print("|cff00ff00LucidNav:|r No checkpoints saved yet. Click Save first.")
+            ns.Print("No checkpoints saved yet. Click Save first.")
             return
         end
         if MenuUtil and MenuUtil.CreateContextMenu then
@@ -530,7 +530,7 @@ function MapUI.UpdateWallButtons()
 
     -- Center cell: room index text.
     if ns.maze.ref_center_text then
-        ns.maze.ref_center_text:SetText(r and "|cffeeeeee" .. r.index .. "|r" or "")
+        ns.maze.ref_center_text:SetText(r and ns.ColorText(C.textColor.roomIndex, tostring(r.index)) or "")
     end
 
     -- Direction cells: fill = neighbour-exists state.
@@ -556,9 +556,9 @@ function MapUI.UpdateMatchButtons()
         local btn = ns.maze.match_buttons[i]
         if btn then
             if ns.Engine.IsMatched(i) then
-                btn:SetText("|cff44cc44v|r")
+                btn:SetText(ns.ColorText(C.textColor.matched, "v"))
             else
-                btn:SetText("|cff555555o|r")
+                btn:SetText(ns.ColorText(C.textColor.unmatched, "o"))
             end
         end
     end
