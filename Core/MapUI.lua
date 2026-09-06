@@ -189,7 +189,6 @@ local function buildMarkerPanel(maze)
     for i = 1, 5 do
         local y = -22 - (i-1) * ROW_H
 
-        -- Rune button
         local rune = CreateFrame("Button", nil, panel)
         rune:SetSize(26, 26)   -- scaled from 28 to match tighter rows
         rune:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, y)
@@ -203,7 +202,6 @@ local function buildMarkerPanel(maze)
         tip(rune, ns.PoiName(i))
         maze.poi_buttons[i] = runeTex
 
-        -- Orb button
         local orb = CreateFrame("Button", nil, panel)
         orb:SetSize(26, 26)   -- scaled from 28
         orb:SetPoint("TOPLEFT", panel, "TOPLEFT", 38, y)
@@ -216,13 +214,11 @@ local function buildMarkerPanel(maze)
         tip(orb, ns.PoiName(i + 5))
         maze.poi_buttons[i+5] = orbTex
 
-        -- Color label anchored to the right of the orb button
         local lbl = panel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         lbl:SetPoint("LEFT", orb, "RIGHT", 6, 0)
         lbl:SetText(ns.ColorText(C.poi_hex_colors[i], ns.L.COLOR[i]))
         lbl:SetJustifyH("LEFT")
 
-        -- Match toggle: small button on the right edge of the row
         local matchBtn = CreateFrame("Button", nil, panel)
         matchBtn:SetSize(20, 20)
         matchBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, y + 3)
@@ -236,7 +232,6 @@ local function buildMarkerPanel(maze)
         maze.match_buttons[i] = matchBtn
     end
 
-    -- Clear button
     local clearBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     clearBtn:SetSize(68, 20)
     clearBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 2)  -- gap tightened from -4
@@ -259,11 +254,9 @@ local function buildMarkerPanel(maze)
         btn:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -22 - 5*ROW_H - 42 - (i-1)*(BTN_H+1))
         btn.target = i
         btn:SetScript("OnClick", function(self) ns.Engine.SetGuidance(self) end)
-        -- Highlight on hover
         local hl = btn:CreateTexture(nil,"HIGHLIGHT")
         hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         hl:SetBlendMode("ADD"); hl:SetAllPoints()
-        -- Font string for SetText support
         local fs = btn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         fs:SetAllPoints(); fs:SetJustifyH("LEFT")
         btn:SetFontString(fs)
@@ -296,7 +289,6 @@ local function buildCompass(maze, sf)
     cLabel("E", "RIGHT",  -4,  0)
     cLabel("W", "LEFT",    4,  0)
 
-    -- Center crosshair dot
     local dot = comp:CreateTexture(nil, "OVERLAY")
     dot:SetSize(4, 4)
     dot:SetPoint("CENTER")
@@ -426,7 +418,6 @@ end
 -- Bottom controls row
 ------------------------------------------------------------
 local function buildControls(maze)
-    -- Tracking checkbox
     local cb = CreateFrame("CheckButton", nil, maze, "UICheckButtonTemplate")
     cb:SetSize(20, 20)
     cb:SetPoint("BOTTOMLEFT", maze, "BOTTOMLEFT", 10, 68)
@@ -471,7 +462,6 @@ local function buildControls(maze)
     trapBtn:SetScript("OnClick", function() ns.Engine.HitTheTrap() end)
     tip(trapBtn, ns.L.TIP_GOT_PORTED)
 
-    -- Opacity slider
     local sliderName = addonName .. "OpacitySlider"
     local slider = CreateFrame("Slider", sliderName, maze, "OptionsSliderTemplate")
     slider:SetPoint("BOTTOMRIGHT", maze, "BOTTOMRIGHT", -170, 78)

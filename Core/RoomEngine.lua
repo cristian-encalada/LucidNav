@@ -1082,7 +1082,6 @@ local function setPOIClick(self)
     if not target then return end
 
     if self.poi_index == nil then
-        -- Clear button
         if poirooms[target.poi_index] ~= nil then poirooms[target.poi_index] = nil end
         target.POI_t = nil; target.POI_c = nil; target.poi_index = 0
         recolorRoom(target)
